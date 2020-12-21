@@ -4,3 +4,4 @@
 3. [Rescuing exceptions in Ruby](ruby/Rescuing-exceptions-in-Ruby.md)
 4. [Rescue StandardError, Not Exception](ruby/Rescue-StandardError,-Not-Exception.md)
 5. [The Safely Pattern](etc./The-Safely-Pattern.md)
+6. [Never Schedule Future Jobs](etc./Never-Schedule-Future-Jobs.md)
