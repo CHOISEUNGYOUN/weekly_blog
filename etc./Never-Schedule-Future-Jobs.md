@@ -95,3 +95,7 @@ end
 ## 할수 있다고 다 해야 하는게 아니다.
 Amzon SQS 나 Sidekiq 처럼 인기있는 스케쥴링 툴들은 미래에 일어날 작업들을 예약 할 수 있도록 지원하지만, 내 생각에는 이러한 기능들이 너무 위험해 보인다. 당신은 미래에 실행될 작업을 예약할 때 어떠한 일이 벌어질지 모른다. 현재 코드가 나중에 어떻게 바뀔지 모르기 때문이다. 현재 예상되는 범위 내에서만 당신의 비즈니스 로직을 설계하고 실행해라.
 
+<br/>
+
+Original Source:
+[Never Schedule Future Jobs](http://lanceolsen.net/never-schedule-future-jobs/)
