@@ -6,3 +6,4 @@
 5. [The Safely Pattern](etc./The-Safely-Pattern.md)
 6. [Never Schedule Future Jobs](etc./Never-Schedule-Future-Jobs.md)
 7. [Validate multiple contexts together in Rails 5](ruby/Validate-multiple-contexts-together-in-Rails-5.md)
+8. [Understanding Database Transactions in Rails](ruby/Understanding-Database-Transactions-in-Rails.md)
