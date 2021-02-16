@@ -7,3 +7,4 @@
 6. [Never Schedule Future Jobs](etc./Never-Schedule-Future-Jobs.md)
 7. [Validate multiple contexts together in Rails 5](ruby/Validate-multiple-contexts-together-in-Rails-5.md)
 8. [Understanding Database Transactions in Rails](ruby/Understanding-Database-Transactions-in-Rails.md)
+9. [Easier usage of Rails 5.2 credentials and app-specific configuration](ruby/Easier-usage-of-Rails-5-2-credentials-and-app-specific-configuration.md)
