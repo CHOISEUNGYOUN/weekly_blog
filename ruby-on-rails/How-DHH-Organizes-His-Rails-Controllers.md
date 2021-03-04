@@ -1,8 +1,8 @@
-## How DHH Organizes His Rails Controllers
+## DHH는 Rails Controller를 어떻게 정리할까?
 
-In a recent interview with Full Stack Radio our Lord and Savior DHH™ explains how he organizes Rails controllers in the latest version of Basecamp. Here is an enhanced transcript of his holy words:
+우리의 대장이자 구세주인(?) DHH는 최근 [Full Stack Radio 인터뷰](https://fullstackradio.com/32) 에서 가장 최신 버전의 [베이스캠프](https://basecamp.com/) 앱에서 어떻게 컨트롤러는 정리했는지 이야기했다. 이 글에서 그 내용을 조금 수정 보완해두었다.
 
-What I’ve come to embrace is that being almost fundamentalistic about when I create a new controller to stay adherent to REST has served me better every single time. Every single time I’ve regretted the state of my controllers, it’s been because I’ve had too few of them. I’ve been trying to overload things too heavily.
+내가 최근에 깨달은것이 있다면 REST 방식을 고수하기 위해 매번 새로운 컨트롤러를 만드는 기초적인 방법이 항상 훨씬 더 나은 결과를 가져다 준다는 것이었다. 내가 구성해둔 컨트롤러의 상태를 볼 때마다 너무 적게 만든게 아닌가 하는 후회를 했었다. 내가 너무 많은것들을 하나의 컨트롤러에 담으려고 했었기 때문이다.
 
 So, in Basecamp 3 we spin off controllers every single time there’s even sort of a subresource that makes sense. Which can be things like filters. Like, say, you have this screen and it looks in a certain state. Well, if you apply a couple of filters and dropdowns to it, it’s in a different state. Sometimes we just take those states and we make a brand new controller for it.
 
