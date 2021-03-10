@@ -9,3 +9,4 @@
 8. [Understanding Database Transactions in Rails](ruby-on-rails/Understanding-Database-Transactions-in-Rails.md)
 9. [Easier usage of Rails 5.2 credentials and app-specific configuration](ruby-on-rails/Easier-usage-of-Rails-5-2-credentials-and-app-specific-configuration.md)
 10. [How DHH Organizes His Rails Controllers](ruby-on-rails/How-DHH-Organizes-His-Rails-Controllers.md)
+11. [Helping Devs Understand Concerns Faster](ruby-on-rails/Helping-Devs-Understand-Concerns-Faster.md)
