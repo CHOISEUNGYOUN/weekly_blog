@@ -1,6 +1,6 @@
-## Concerned about Code Reuse?
+## 코드 재사용성을 고민하고(Concerned) 있는가?
 
-Right out of the gate, Ruby gives us some powerful ways to re-use instance and class methods without relying on inheritance. Modules in Ruby can be used to mixin methods to classes fairly easily. For example, we can add new instance methods using include.
+코드 재사용성을 고민하고 있는 당신을 위해 Ruby는 클래스 인스턴스와 메소드를 상속없이 재사용 가능한 방법을 제시해준다. Ruby 언어에 존재하는 Module은 클래스 믹스인으로 쉽게 사용이 가능하다. 예를 들어 아래 예제와 같이 Module을 `include` 하여 사용할 수 있다.
 
 ```rb
 module DogFort
@@ -14,13 +14,15 @@ class Dog
 end
 ```
 
-Now we’re able to call any methods defined in our `DogFort` Module as if they were simply slipped into (included) into our `Dog` class.
+이와 같이 작성하면 `DogFort` Module에서 구현한 모든 메소드들을 `Dog` 클래스에서 사용 가능하다.
+
 ```rb
 dog_instance = Dog.new
 dog_instance.call_dog
 # => "this is dog!"
 ```
-Using Modules a fairly easy way to re-use methods, if you want you can `extend` a Module to add methods to a class directly.
+
+또한 `extend` 를 선언하면 Module 메소드들을 클래스 메소드로 손쉽게 사용 할 수 있다..
 
 ```rb
 module DogFort
@@ -33,7 +35,8 @@ class Dog
   extend DogFort
 end
 ```
-Now if we were to call `Dog.new.board_the_doors` we would get an error, since we’ve added it as a class method instead.
+
+하지만 `Dog.new.board_the_doors` 형태 처럼 인스턴스 메소드로 부르려고 한다면 에러가 날 것이다. 이는 `extend` 로 포함한 Module이 클래스 메소드이기 때문이다.
 
 ```rb
 Dog.board_the_doors
@@ -42,10 +45,12 @@ Dog.board_the_doors
 Dog.class
 # => Class
 ```
-Sweet! Though what if you wanted to add an instance method and a class method to a class. We could have two Modules, one to be included and one to be extended, wouldn’t be to hard but it would be nice if we only had to use one include statement, especially if the two Modules are related. So is it possible to add instance and class methods with only one include statement? Of course…
 
-### Enter Concerns
-A concern is a Module that adds instance methods (like `Dog.new.call_dog`) and class methods (like `Dog.board_the_doors`) to a class. If you’ve poked around the Rails source code you’ll see this everywhere. It’s so common that Active Support added a helper Module to create concerns. To use it require ActiveSupport and then `extend ActiveSupport::Concern`
+멋지지 않는가? 하지만 클래스 메소드와 인스턴스 메소드 둘다 추가하려면 어떻게 해야할까? 아마 `include` 와 `extend` 로 호출되는 두개의 Module이 필요할 것이다. 그리 어려운 것은 아니나 두 Module 모두 연관성이 있다면 하나의 Module로 구성해서 호출하는 것이 더 나을 것이다. 클래스 메소드와 인스턴스 메소드 둘다 하나의 Module에 포함해서 선언하는 방법이 없을까? 당연히 있다!
+
+### Concerns 입문
+
+Concern은 Module의 인스턴스 메소드(예: `Dog.new.call_dog`) 와 클래스 메소드 (예: `Dog.board_the_doors`)를 하나로 합친 Module이다. Rails 소스코드들을 조금만 훑어본다면 여기저기에서 사용되고 있는 것을 발견 할 수 있다. `ActiveSupport` 클래스에 Concern을 만들기 위해 helper Module을 추가하는것은 흔한 패턴이다. 이를 사용하기 위해선 `ActiveSupport`를 가져오고 `extend ActiveSupport::Concern`을 하면 된다.
 
 ```rb
 require 'active_support/concern'
@@ -55,7 +60,8 @@ module DogFort
   # ...
 end
 ```
-Now any methods you put into this Module will be instance methods (methods on a new instance of a class `Dog.new`) and any methods that you put into a Module named `ClassMethods` will be added on to the class directly (such as `Dog`).
+
+이제 Module에 추가하는 모든 메소드들은 인스턴스 메소드가 된다.(여기 예시에서는 `Dog` 클래스의 인스턴스 메소드.) 그리고 `ClassMethods` Module 하위에 존재하는 모든 메소드들은 클래스 메소드가 된다. (여기 예시에서는 `Dog` 클래스에서 바로 호출되는 메소드.)
 
 ```rb
 require 'active_support/concern'
@@ -76,7 +82,8 @@ module YoDawgFort
   end
 end
 ```
-So now when we add this new Module to a class, we’ll get instance and class methods
+
+이제 이 Module을 클래스에 추가하면 클래스 메소드와 인스턴스 메소드 모두 추가 할 수 있다.
 
 ```rb
 class YoDawg
@@ -90,10 +97,11 @@ yodawg_instance = YoDawg.new
 yodawg_instance.call_dawg
 # => "yo dawg, this is dawg!"
 ```
-Pretty cool huh?
+꽤 근사하지 않는가?
 
 ### Included
-That’s not all, Active Support also gives us a special method called included that we can use to call methods during include time. If you add `included` to your `ActiveSupport::Concern` any code in there will be called when it is included
+
+이것 뿐만 아니라 `ActiveSupport` 클래스 에서는 `included` 라는 특수한 기능을 사용할 수 있다. 이 기능은 메소드를 include 하는 과정에서 호출 된다. 만약 `ActiveSupport::Concern` 에 `included` 블럭으로 감싼 코드를 추가한다면 해당 코드들은 Module이 include 될때 호출된다.
 
 ```rb
 module DogCatcher
@@ -109,7 +117,7 @@ module DogCatcher
 end
 ```
 
-So when we include `DogCatcher` in a class it’s included block will be called immediately.
+위 예제의 `DogCatcher` 를 아래 예시와 같이 include 한다면 include 되는 즉시 호출된다.
 
 ```rb
 class Dog
@@ -122,13 +130,17 @@ class Cat
 end
 # => "you may go"
 ```
-While this is a contrived example, you can imagine wanting to maybe make a concern for Rails controllers and wanting to add `before_filter`'s to our code. We can do this easily adding the included block.
 
-### Is this magic?
-Nope, under the hood we’re just using good old fashioned Ruby. If you want to learn more about all the fun things you can do with Modules I recommend checking out one of my favorite Ruby books Metaprogramming Ruby and Dave Thomas also has a fantastic screencast series.
+이 코드는 컨셉에 불과하지만 Rails 컨트롤러에 concern 을 만들어 `before_filter` 를 위한 코드를 구현하는 것을 생각 해볼 수 있다. 이런 것들을 `included` 블럭을 통해서 쉽게 구현 할 수 있다.
 
-### Gotcha
-When you’re writing Modules I guarantee that you’ll slip up and accidentally try to create a class method using `self` or `class << self` but it won’t work because it’s now a method on the Module.
+
+### 이 모든 것들이 과연 마법일까?
+
+전혀 그렇지 않다. concern의 이면에는 단지 우리가 오랫동안 사용해온 Ruby 코드들이 존재한다. Module 에 대한 디테일하고 재밌는 요소들을 더 배워보고 싶다면 필자는 [Metaprogramming Ruby 2](https://books.google.co.kr/books/about/Metaprogramming_Ruby_2.html?id=V0iToAEACAAJ&source=kp_cover&redir_esc=y) 책과 [Dave Thomas](https://ruby-doc.org/docs/ruby-doc-bundle/ProgrammingRuby/index.html) 가 저술한 시리즈를 필독하기를 추천한다.
+
+### Module 완전히 이해하기
+
+필자가 확신하건데, 종종 Module을 사용하다 보면 `self` 나 `class << self` 를 사용하여 클래스 메소드를 구현하는 실수를 범한다. 당연히 이것은 Module의 메소드이기 때문에 동작하지 않는다.
 
 ```rb
 module DogFort
@@ -137,7 +149,8 @@ module DogFort
   end
 end
 ```
-In the example above the context of `self` is actually the Module object `DogFort` so when we include it into another class we won’t see the method.
+
+위 예시에서의 `self` 는 Module 오브젝트인 `DogFrot`를 가리키기 때문에 다른 클래스에서 이 모듈을 include 하는 경우 제대로 동작하지 않는다.
 
 ```rb
 class Wolf
@@ -151,7 +164,8 @@ wolf_instance = Wolf.new
 wolf_instance.call_dog
 # NameError: undefined local variable or method `call_dog'
 ```
-If you want to use that method in this context you will need to call the Module directly
+
+`call_dog` 메소드를 사용하고 싶다면 `DogFort` 모듈을 통해서만 호출이 가능하다.
 
 ```rb
 DogFort.call_dog
