@@ -9,6 +9,8 @@
 
 3. `Module` 활용 예시<br>
    이 예시들은 실제 Basecamp3, Hey 앱에서 사용중인 코드들이다. 이 코드들의 특징은 `ActiveSupport::Concern`을 사용하지 않고 `POROs(Plain Old Ruby Objects)` 룰을 따랐다는 것이다.
+   <br>
+   <br>
   `예시1`
 
    ```rb
