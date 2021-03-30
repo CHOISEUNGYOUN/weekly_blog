@@ -11,3 +11,4 @@
 10. [How DHH Organizes His Rails Controllers](ruby-on-rails/How-DHH-Organizes-His-Rails-Controllers.md)
 11. [Concerned about Code Reuse?](ruby-on-rails/Concerned-About-Code-Reuse.md)
 12. [Helping Devs Understand Concerns Faster](ruby-on-rails/Helping-Devs-Understand-Concerns-Faster.md)
+13. [Rails 6 adds support for multi environment credentials](ruby-on-rails/Rails-6-adds-support-for-multi-environment-credentials.md)
