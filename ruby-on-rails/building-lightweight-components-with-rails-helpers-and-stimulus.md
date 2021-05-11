@@ -1,10 +1,10 @@
-## Tip: Building lightweight components with Rails Helpers and Stimulus
+## Rails Helpers 모듈과 Stimulus를 활용한 가벼운 컴포넌트 만들기
 
-Custom Rails `helpers` modules are often overlooked, but they can be a great option for building lightweight components and reducing boilerplate in your Stimulus controllers.
+우리는 종종 커스텀 Rails `helpers` 모듈은 간과하지만 잘 사용한다면 가벼운 단위의 컴포넌트 구성과 Stimulus 컨트롤러의 보일러플레이트 코드를 줄이는데 유용한 수단이 될 수 있다.
 
-One nice thing about Stimulus is that you can quickly infer the functionality just from reading the markup attributes, but for components that have a couple of values and actions, you can benefit from hiding some of the implementation details.
+Stimulus의 장점은 마크업 요소를 읽기만해도 해당 컴포넌트가 어떤 기능을 하는지 빨리 추론할 수 있다는 것 뿐만 아니라 여러 변수와 동작을 요구하는 컴포넌트들의 동작 디테일을 추상화 시킬수 있다.
 
-Let’s take the example from my [GitHub-style Hovercards article](https://boringrails.com/articles/hovercards-stimulus/):
+여기 [GitHub-style Hovercards article](https://boringrails.com/articles/hovercards-stimulus/) 언급했던 예시를 보자.
 
 ```erb
 <div class="inline-block"
@@ -15,18 +15,20 @@ Let’s take the example from my [GitHub-style Hovercards article](https://borin
   <%= link_to shoe.name, shoe, class: "branded-link" %>
 </div>
 ```
-The `hovercard_controller` needs to be passed in a `url` value and have two actions added for showing and hiding the card on hover. The controller is wrapped around a link that can be styled and customized for each type of hovercard we want in the app.
 
-If you have only a few places using the controller, it’s not a big deal. But if you want to [re-use this controller](https://boringrails.com/articles/better-stimulus-controllers) for more and more types of hovercards, try adding your own Rails helper.
+`hovercard_controller`는 `url` 변수를 받음과 동시에 마우스 커서를 올려놓을 시 카드를 보여주고 숨기는 동작을 추가한다. 컨트롤러는 각각의 hovercard 마다 css 커스터마이징이 가능한 link 태그를 감싸고 있다.
 
-Usage
-Modules in the `app/helpers` folder will automatically be available for you to use in your views.
+이 컨트롤러를 많이 사용하지 않는다면 문제 될일은 없으나, 다양한 종류의 hovercard에 사용을 하고 싶다면 [재사용성을 감안하여](https://boringrails.com/articles/better-stimulus-controllers) Rails helper에 추가를 해보자.
+
+### 사용예시
+
+`app/helpers` 폴더에 있는 모듈들은 자동으로 view에서 사용 가능하다.
 
 ```rb
 # app/helpers/hovercard_helper.rb
 module HovercardHelper
 
-  # Use a helper to avoid repeating Stimulus controller attributes
+  # Stimulus 요소들을 반복 적용하는것을 피하기 위해 helper 모듈을 사용.
   def hovercard(url, &block)
     content_tag(:div,
       "data-controller": "hovercard",
@@ -35,7 +37,7 @@ module HovercardHelper
       &block)
   end
 
-  # Build your own light-weight "components"
+  # 가벼운 컴포넌트를 만듬.
   def repo_hovercard(repo, &block)
     hovercard hovercard_repository_path(repo), &block
   end
@@ -46,8 +48,9 @@ module HovercardHelper
 end
 ```
 
-Using a helper allows us to create our own “components” in Ruby to abstract away the implementation details. And because of the power of [Ruby blocks](https://www.codewithjason.com/understanding-ruby-blocks), we can create flexible components that can be customized per usage.
+Helper를 사용하면 Ruby 내에서 동작 조건에 대한 세부 내용들을 추상화 할 수 있게 도와준다. 이는 [Ruby blocks](https://www.codewithjason.com/understanding-ruby-blocks) 의 강력한 기능이다. 이 기능을 활용하면 어느 상황에도 맞추어 적용할 수 있는 유연한 컴포넌트를 만들 수 있다.
 
+```erb
 <!-- app/views/timeline.html.erb -->
 
 <%= user_hovercard(@user) do %>
@@ -60,12 +63,14 @@ Using a helper allows us to create our own “components” in Ruby to abstract 
     <%= link_to repository.name, repository %>
   </div>
 <% end %>
-For example, we could build a repo_hovercard helper that accepts a Repository model and a block to render. We have full control over what the display based on the page context but we don’t want to worry about wiring up Stimulus events correct.
+```
 
-And if we want to change our Stimulus controller, it’s all in one spot, instead of spread out across many views in the app.
+`Repository` 모델을 변수로 받고 블럭을 렌더 해주는 `repo_hovercard` helper 를 만드는 것 처럼 매번 helper 메소드를 만들 수도 있다. 이는 각 페이지 컨텍스트 마다 동작되는 `hovercard`를 하나의 helper 모듈에서 컨트롤 하는 장점 뿐만 아니라 매번 Stimulus 로 UI 이벤트를 구성하는 문제도 덜어준다.
 
-Additional Resources
-Rails API: Helpers
+그리고 Stimulus 컨트롤러를 수정하고 싶으면 하나의 컨트롤러를 수정하기만 하면 된다. 여러 view 페이지들을 일일이 확인해가며 수정할 필요가 없는 것이다.
+
+추가 참고 사항
+Rails API: [Helpers](https://api.rubyonrails.org/classes/ActionController/Helpers.html)
 
 Original Source:
 [Tip: Building lightweight components with Rails Helpers and Stimulus](https://boringrails.com/tips/lightweight-components-with-helpers-stimulus)
