@@ -13,3 +13,4 @@
 12. [Helping Devs Understand Concerns Faster](ruby-on-rails/Helping-Devs-Understand-Concerns-Faster.md)
 13. [Rails 6 adds support for multi environment credentials](ruby-on-rails/Rails-6-adds-support-for-multi-environment-credentials.md)
 14. [Tip: Building lightweight components with Rails Helpers and Stimulus](ruby-on-rails/building-lightweight-components-with-rails-helpers-and-stimulus.md)
+15. [Tip: Automatically cast params with the Rails Attributes API](ruby-on-rails/automatically-cast-params-with-the-rails-attributes-api.md)
