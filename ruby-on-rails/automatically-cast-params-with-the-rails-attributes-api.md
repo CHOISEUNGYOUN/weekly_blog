@@ -1,6 +1,6 @@
-## Tip: Automatically cast params with the Rails Attributes API
+## Ralis Attributes API를 활용한 params 자동 캐스팅.
 
-A common practice in Rails apps is to extract logic into plain-old Ruby objects (POROs). But often you are passing data to these objects directly from controller `params` and the data comes in as strings.
+Rails 어플리케이션을 구축하면서 가장 일반적으로 사용하는 패턴은 로직에 담긴 데이터를 plain-old Ruby 객체(POROs)에 담는 일이다. 하지만 종종 컨트롤러에서 `params`에 담겨있는 문자열 데이터를 받아 직접 처리하는 경우도 있다.
 
 ```rb
 class SalesReport
@@ -13,20 +13,20 @@ class SalesReport
   end
 
   def run!
-    # Do some cool stuff
+    # 실행 메소드 구현
   end
 end
 
 report = SalesReport.new(start_date: "2020-01-01", end_date: "2020-03-01", min_items: "10")
 
-# But the data is just stored as strings :(
+# 아래 데이터는 모두 문자열임.
 report.start_date
 # => "2020-01-01"
 report.min_items
 # => "10"
 ```
 
-You probably want `start_date` to be a date and `min_items` to be an integer. You could add your own basic type casting to the constructor.
+당신은 위 예제에 있는 `start_date`는 date 속성으로, `min_items`는 integer 속성으로 할당되길 원할 것이다. 이런 경우 constructor에 간단한 타입 캐스팅을 추가하면 해당 기능을 구현할 수 있다.
 
 ```rb
 class SalesReport
@@ -39,17 +39,18 @@ class SalesReport
   end
 
   def run!
-    # Do some cool stuff
+    # 실행 메소드 구현
   end
 end
 ```
 
-But even better, you could take advantage of the [Attributes API](https://edgeapi.rubyonrails.org/classes/ActiveRecord/Attributes/ClassMethods.html#method-i-attribute) to handle this casting automatically.
+위 방법도 좋지만, Rails 의 [Attributes API](https://edgeapi.rubyonrails.org/classes/ActiveRecord/Attributes/ClassMethods.html#method-i-attribute) 를 사용하여 이러한 타입 캐스팅을 자동으로 구현 한다면 더욱 더 깔끔하고 편리한 코드를 작성할 수 있다.
 
-### Usage
-The Rails Attributes API is used under-the-hood to type cast attributes for `ActiveRecord` models. When you query for a model that has a `datetime` column in the database and the Ruby object that gets pulled out has a `DateTime` field – that’s the Attributes API at work.
+### 사용법
+Rails의 Attributes API는 `ActiveRecord` 모델의 타입을 자동으로 캐스팅하기 위해 사용되고 있다.
+예를 들어 `datetime` 컬럼을 가지고 있는 모델에 쿼리를 요청하면 `Datetime` 필드 속성을 가진 Ruby 객체를 호출 할 때 Attributes API가 타입 캐스팅을 해준다. 우리가 모르는 사이에 DB와 Ruby 간의 데이터를 자동으로 맞춰주는 것이다.
 
-We can spruce up our report model by mixing in the `ActiveModel::Model` and `ActiveModel::Attributes` modules.
+`ActiveModel::Model` 과 `ActiveModel::Attributes` 모듈을 사용하면 아래 예제의 `SalesReport` 모델을 깔끔하게 타입 캐스팅 처리 할 수 있다.
 
 ```rb
 class SalesReport
@@ -61,13 +62,13 @@ class SalesReport
   attribute :min_items, :integer
 
   def run!
-    # Do some cool stuff
+    # 실행 메소드 구현
   end
 end
 
 report = SalesReport.new(start_date: "2020-01-01", end_date: "2020-03-01", min_items: "10")
 
-# Now the attributes are native types!
+# 아래 객체의 데이터는 이제 ruby native 타입으로 캐스팅 되었음.
 
 report.start_date
 # => Wed, 01 Jan 2020
