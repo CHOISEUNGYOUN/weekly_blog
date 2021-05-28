@@ -76,12 +76,12 @@ report.min_items
 # => 10
 ```
 
-This pattern is great for reducing boilerplate code in form objects, report objects, or any other Model-ish Ruby class in your Rails apps. Let the framework do the type casting for you, instead of trying to reimplement it yourself!
+이러한 패턴을 이용하면 Rails 어플리케이션 내에 사용되는 각 객체에서 보일러플레이트 코드를 줄일수 있다. 직접 타입 캐스팅을 하는 수고스러움 보다 프레임워크 자체가 해주면 개발자 입장에서 훨씬 좋지 않겠는가?
 
-### Options
-> As of Rails 6.1, this module is technically a private API. Use at your own risk!
+### 옵션
+> Rails 6.1 버전부터 Attribute 모듈은 private API로 변환되었다. 리스크가 있음을 반드시 숙지하자!
 
-The Attribute API will automatically handle type casting for most primitives. All of the basics are covered.
+Attribute API 모듈을 사용하면 거의 모든 종류의 원시형 타입 데이터를 자동으로 캐스팅 할 수 있다.
 
 ```rb
 attribute :start_date, :date
@@ -90,9 +90,10 @@ attribute :enabled, :boolean
 attribute :score, :float
 ```
 
-You can find the full list of out-of-the-box types here: [activemodel/lib/active_model/type](https://github.com/rails/rails/tree/v6.0.2.1/activemodel/lib/active_model/type).
+Attribute API 모듈에서 제공하는 모든 타입 캐스팅을 보고싶다면 여기 링크를 확인해보면 된다.
+[activemodel/lib/active_model/type](https://github.com/rails/rails/tree/v6.0.2.1/activemodel/lib/active_model/type)
 
-The coolest part is that the types are very robust in what kind of input they accept. For example, the boolean Attribute type works with any of these values for `false`:
+Attribute API가 제공하는 타입 캐스팅의 가장 큰 장점은 다양한 형태의 데이터를 안정적으로 타입 캐스팅 해준다는 것이다. 예를 들어 아래 배열에 명시된 데이터들은 모두 `false` 로 캐스팅 된다.
 
 ```rb
 FALSE_VALUES = [
@@ -107,14 +108,14 @@ FALSE_VALUES = [
 ]
 ```
 
-You can also register your own custom types that implement `cast` and `serialize`:
+위 예시처럼 커스텀 타입을 선언하고 캐스팅 또는 시리얼라이징 처리를 할 수 있다.
 
 ```rb
 ActiveRecord::Type.register(:zip_code, ZipCodeType)
 
 class ZipCodeType < ActiveRecord::Type::Value
   def cast(value)
-    ZipCode.new(value) # cast to your own ZipCode class for special handling
+    ZipCode.new(value) # 우편번호에 대한 타입 캐스팅과 시리얼라이징 처리를 할 수 있다.
   end
 
   def serialize(value)
@@ -123,7 +124,7 @@ class ZipCodeType < ActiveRecord::Type::Value
 end
 ```
 
-Additionally, you can set a default value for with the Attributes API:
+추가로 Attribute API를 사용해서 기본값을 설정 할 수도 있다.
 
 ```rb
 attribute :start_date, :date, default: 30.days.ago
