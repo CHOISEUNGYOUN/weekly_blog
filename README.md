@@ -15,3 +15,4 @@
 14. [Tip: Building lightweight components with Rails Helpers and Stimulus](ruby-on-rails/building-lightweight-components-with-rails-helpers-and-stimulus.md)
 15. [Tip: Automatically cast params with the Rails Attributes API](ruby-on-rails/automatically-cast-params-with-the-rails-attributes-api.md)
 16. [Understanding "same-site" and "same-origin"](etc./Understanding-same-site-and-same-origin.md)
+17. [SQL Antipatterns Chapter2](sql/SQL-Antipatterns-2.md)
