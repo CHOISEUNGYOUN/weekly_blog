@@ -16,3 +16,4 @@
 15. [Tip: Automatically cast params with the Rails Attributes API](ruby-on-rails/automatically-cast-params-with-the-rails-attributes-api.md)
 16. [Understanding "same-site" and "same-origin"](etc./Understanding-same-site-and-same-origin.md)
 17. [SQL Antipatterns Chapter2](sql/SQL-Antipatterns-2.md)
+18. [SQL Antipatterns Chapter3](sql/SQL-Antipatterns-3.md)
