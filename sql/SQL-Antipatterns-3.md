@@ -130,7 +130,142 @@ WHERE comment_id = LAST_INSERT_ID();
 
 ### 중첩 집합 모델(Nested Sets)
 
-작성중...
+이 구조는 각 부모노드가 자식노드를 직접 가지는 것이 아니라 자식노드의 집합을 특정 조건을 구성하여 가져가는 형태. 예제에서는 `nsleft`, `nsright` 를 사용하였다. 
+
+
+```sql
+CREATE TABLE Comments (
+    comment_id SERIAL PRIMARY KEY,
+    nsleft INTEGER NOT NULL,
+    nsright INTEGER NOT NULL,
+    bug_id BIGINT UNSIGNED NOT NULL,
+    author BIGINT UNSIGNED NOT NULL,
+    comment_date DATETIME NOT NULL,
+    comment TEXT NOT NULL,
+    FOREIGN KEY (bug_id) REFERENCES Bugs (bug_id),
+    FOREIGN KEY (author) REFERENCES Accounts(account_id)
+);
+```
+
+여기서 `nsleft`는 모든 자식노드 숫자보다 작은 조건을, `nsright`는 모든 자식노드의 자식노드 보다 크다는 조건을 가진다. 이 숫자는 테이블에서 생성되는 `id` 값과 전혀 연관이 없다. 이 조건을 통해 직접적으로 부모 자식 관계를 생성하는 것이 아니라 집합으로 구분 할 수 있게 한다.
+
+![alt origin](imgs/SQL-Antipatterns-3_2.png)
+
+```sql
+SELECT c2.*
+FROM Comments AS c1
+  JOIN Comments as c2
+    ON c2.nsleft BETWEEN c1.nsleft AND c1.nsright
+WHERE c1.comment_id = 4;
+```
+
+중첩 집합 모델의 가장 큰 장점은 자식이 있는 노드를 삭제하더라도 해당 자식 노드들이 바로 상위 부모를 바라보게 된다는 점이다. `nsleft` 와 `nsright` 값 또한 그 상위 부모노드의 규칙을 따르기 때문에 문제가 없다.
+
+```sql
+-- Reports depth = 3
+SELECT c1.comment_id, COUNT(c2.comment_id) AS depth
+FROM Comment AS c1
+    JOIN Comment AS c2
+      ON c1.nsleft BETWEEN c2.nsleft AND c2.nsright
+WHERE c1.comment_id = 7
+GROUP BY c1.comment_id;
+
+DELETE FROM Comment WHERE comment_id = 6;
+
+-- Reports depth = 2
+SELECT c1.comment_id, COUNT(c2.comment_id) AS depth
+FROM Comment AS c1
+    JOIN Comment AS c2
+      ON c1.nsleft BETWEEN c2.nsleft AND c2.nsright
+WHERE c1.comment_id = 7
+GROUP BY c1.comment_id;
+```
+
+**단점**
+가장 큰 문제점은 선택한 노드의 인접한 부모, 자식 노드들을 한꺼번에 불러올때 복잡한 쿼리를 작성해야 한다.
+
+```sql
+# id 6 번 코멘트의 인접 부모노드를 불러오는 경우
+SELECT parent.*
+FROM Comment AS c
+    JOIN Comment AS parent
+      ON c.nsleft BETWEEN parent.nsleft AND parent.nsright
+    LEFT OUTER JOIN Comment AS in_between
+      ON c.nsleft BETWEEN in_between.nsleft AND in_between.nsright
+      AND in_between.nsleft BETWEEN parent.nsleft AND parent.nsright
+WHERE c.comment_id = 6
+  AND in_between.comment_id IS NULL;
+```
+
+노드 추가, 변경 및 이동을 할때도 복잡한 연산을 해야하는 쿼리를 작성해야한다. 특히 추가하는 경우 루트에서 지정한 `nsleft`, `nsright` 값을 기반으로 순차적으로 다시 계산을 해야하므로 자원 소모가 심하다.
+
+따라서 집합 계층 구조를 사용하고자 한다면, 간단한 서브트리 형태가 필요한 경우에만 사용하는 것을 권장한다.
+
+
+### 클로저 테이블(Closure Table)
+필자가 보기에 가장 심플한 구조로써, 자기참조를 중계 테이블을 추가하여 관리하는 것이다. 이런 방식으로 하면 각 노드가 서로 직접 연결될수도, 계층을 통해 연결될 수도 있다. 이는 좀 더 유연한 데이터 구조를 가지게 된다.
+
+```sql
+CREATE TABLE Comments (
+    comment_id SERIAL PRIMARY KEY,
+    bug_id BIGINT UNSIGNED NOT NULL,
+    author BIGINT UNSIGNED NOT NULL,
+    comment_date DATETIME NOT NULL,
+    comment TEXT NOT NULL,
+    FOREIGN KEY (bug_id) REFERENCES Bugs(bug_id),
+    FOREIGN KEY (author) REFERENCES Accounts(account_id)
+);
+CREATE TABLE TreePaths (
+    ancestor BIGINT UNSIGNED NOT NULL,
+    descendant BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY(ancestor, descendant),
+    FOREIGN KEY (ancestor) REFERENCES Comments(comment_id),
+    FOREIGN KEY (descendant) REFERENCES Comments(comment_id)
+);
+```
+
+조회, 추가 쿼리도 좀 더 직관적이다.
+
+```sql
+
+# 부모가 4인 코멘트 조호ㅢ
+SELECT c.*
+FROM Comments AS c
+    JOIN TreePaths AS t ON c.comment_id = t.descendant
+WHERE t.ancestor = 4;
+
+# 자식이 6인 코멘트 조회
+SELECT c.*
+FROM Comments AS c
+    JOIN TreePaths AS t ON c.comment_id = t.ancestor
+WHERE t.descendant = 6;
+
+# 코멘트 추가
+INSERT INTO TreePaths (ancestor, descendant)
+    SELECT t.ancestor, 8
+    FROM TreePaths AS t
+    WHERE t.descendant = 5
+UNION ALL
+    SELECT 8, 8;
+
+# 자식이 7인 코멘트 모두 삭제
+DELETE FROM TreePaths WHERE descendant = 7;
+
+# 부모가 4인 코멘트 모두 삭제
+DELETE FROM TreePaths
+WHERE descendant IN (SELECT descendant
+                      FROM TreePaths
+                      WHERE ancestor = 4);
+
+```
+
+삭제에서 눈여겨 봐야 할 점은 코멘트를 직접 삭제하는 것이 아니라 `TreePaths` 테이블에 있는 관계를 삭제한다는 것이다. 물리적 삭제가 반드시 필요하다면 관계 삭제 후, 코멘트 테이블에서 직접 삭제를 차후에 따로 실행하는 방식으로 진행하면 된다.
+
+
+![alt origin](imgs/SQL-Antipatterns-3_3.png)
+
+### 결론
+이 장에서 다룬 모든 전략이 다 저마다 상황에 따라 가치가 있다고 생각한다. 마지막에 소개한 클로저 테이블이 가장 확장성과 안정성 모두 추구한 모델링 전략이라고 생각하지만 다른 전략과는 다르게 중계 테이블을 생성해야 한다는 점, 계층 관계가 깊어지면 깊어질수록 인접 리스트 형식처럼 쿼리 자원 소모값이 늘어난다는 단점도 있다. 각 상황에 맞추어 이에 맞는 전략을 가져가는 것이 가장 중요하다고 볼 수 있다.
 
 > 이 글은 [SQL Antipatterns - by Bill Karwin](https://pragprog.com/titles/bksqla/sql-antipatterns/) 영문 원본의 Chapter3 를 요약한 글입니다. 자의적인 해석이 들어 간 것을 참고하셨으면 좋겠습니다.
 > 
