@@ -1,4 +1,4 @@
-## Chapter 2 Jaywalking
+# Chapter 2 Jaywalking
 
 ### Jaywalking 이란?
 SQL 모델링에서 ,(콤마)로 분리해서 배열 형식으로 데이터를 저장하는 방식을 Jaywalking으로 말하며 일종의 안티패턴으로 취급한다.

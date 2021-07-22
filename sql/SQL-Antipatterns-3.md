@@ -1,4 +1,4 @@
-## Chapter 3 Naive Tree
+# Chapter 3 Naive Tree
 
 ### 인접 리스트(Adjacency list)
 
