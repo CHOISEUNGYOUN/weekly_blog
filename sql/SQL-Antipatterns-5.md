@@ -101,7 +101,26 @@ CREATE TABLE Bugs (
 이와 동시에 외래키 제약조건을 사용하면 참조 무결성을 보장하기 위해 부차적으로 스크립트를 작성하여 실행 시킨다던지 참조하는 테이블을 찾아 id를 직접 비교하는 등의 작업을 덜 수 있다.
 
 
-작성중...
+### 여러 테이블 변경 지원
+
+외래키를 사용하면 `cascading updates` 라는 기능 또한 사용 가능하다.
+
+```sql
+CREATE TABLE Bugs (
+  -- . . .
+  reported_by BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'NEW',
+  FOREIGN KEY (reported_by) REFERENCES Accounts(account_id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT,
+  FOREIGN KEY (status) REFERENCES BugStatus(status)
+    ON UPDATE CASCADE
+    ON DELETE SET DEFAULT
+);
+```
+이 기능을 사용하면 부모 테이블에서 수정/삭제가 일어날때 자식 테이블에도 이러한 업데이트를 함께 반영 시킬 수 있다.
+
+## 결론
+외래키를 사용하는 것이 좀 더 손이 많이 가는 작업이라고 오해하지만, 결과적으로 안티패턴 챕터에서 보았던 경우들을 생각해 본다면 이는 개발자의 시간을 더욱 더 아껴주는 것이라는 것을 알수 있다.
 
 > 이 글은 [SQL Antipatterns - by Bill Karwin](https://pragprog.com/titles/bksqla/sql-antipatterns/) 영문 원본의 Chapter5 를 요약한 글입니다. 자의적인 해석이 들어 간 것을 참고하셨으면 좋겠습니다.
-> 
