@@ -233,6 +233,9 @@ WHERE c.comment_id = 9876;
 
 ### 슈퍼 테이블 생성하기
 객체지향적 다형성 이론에서는 두가지 서브타입들이 비슷하게 참조 될 수 있다고 언급한다. 그 이유는 해당 서브타입들 모두 하나의 슈퍼타입을 공유하고 있기 때문이다. 따라서 다형성 관계 모델링을 역참조 하는 방식으로 하나의 슈퍼 테이블을 공유하여 확장성을 보장 할 수 있다.
+
+![img](imgs/SQL-Antipatterns-7_3.png)
+
 ```sql
 CREATE TABLE Issues (
   issue_id SERIAL PRIMARY KEY
