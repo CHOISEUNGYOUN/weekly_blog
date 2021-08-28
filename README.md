@@ -22,6 +22,7 @@
 * [SQL Antipatterns Chapter6](sql/SQL-Antipatterns-6.md)
 * [SQL Antipatterns Chapter7](sql/SQL-Antipatterns-7.md)
 * [SQL Antipatterns Chapter8](sql/SQL-Antipatterns-8.md)
+* [SQL Antipatterns Chapter9](sql/SQL-Antipatterns-9.md)
 
 # Etc.
 * [Hunting for great names in programming](etc./Hunting-for-great-names-in-programming.md)
