@@ -136,8 +136,60 @@ CREATE TABLE ProjectHistory (
 * 테이블명을 인자값으로 넘기기 위해 고민하는 경우<br>
 
 ## 안티패턴 사용이 정당화 되는 경우
+수동으로 테이블을 분리하는 것이 좋은 경우는 더 이상 서비스에 사용되지 않는 데이터를 보관하는 경우이다. 이 작업을 해주기만 해도 쿼리의 성능이 월등히 좋아진다. 만약 서비스에 사용되진 않으나 히스토리 용도로 필요한 데이터셋이 있다면 분리해서 보관하자.
 
+## 해결책 - 파티션 및 정규화
+테이블을 수동으로 분리하는 것 보다 더 좋은 방법은 수평 분할(또는 샤딩-sharding), 수직 분할 및 종속 테이블을 활용하는 방법이 있다.
 
-작성중...
+### 수평 분할
+수평 분할 또는 샤딩이라 불리는 이 기법은 말 그대로 테이블에 있는 로우들을 특정 규칙에 의해 수평 분할 하는 것이다.
+![img](imgs/SQL-Antipatterns-9_1.png)
+수평 분할을 사용하면 기본적으로 하나의 테이블이 여러 파일로 나뉘어 저장된다. 하지만 우리가 쿼리를 실행하면 SQL 내부에서는 마치 하나의 테이블에 대한 쿼리를 실행 하는 것처럼 동작하게 된다. 이는 테이블의 무결성을 보장하면서도 수동으로 일일히 테이블을 생성하는 번거로움과 휴먼에러를 방지 할 수 있다. 아래 예시는 `date_reported`의 년도에 따라 4개의 파티션으로 수평 분할하는 DDL 이다.
+
+```sql
+CREATE TABLE Bugs (
+  bug_id SERIAL PRIMARY KEY,
+  -- other columns
+  date_reported DATE
+) PARTITION BY HASH ( YEAR(date_reported) )
+  PARTITIONS 4;
+```
+
+파티셔닝은 SQL 표준으로 정립된 것이 없기 때문에 각 DB 브랜드 마다 서로 다른 방식으로 파티셔닝을 구현하고 있다. 그래도 여기서 핵심은 거의 모든 SQL 에서 파티셔닝을 지원한다는 점이다.
+
+### 수직 분할
+샤딩과 다르게 수직 분할은 컬럼 기준으로 데이터를 나눈다. 이 방식은 여러 컬럼 중 자주 사용되지 않거나 컬럼에 저장된 데이터가 아주 큰 경우 빛을 발한다. 예를 들어 `BLOB` 이나 `TEXT` 속성을 담고 있는 컬럼은 아주 큰 데이터를 저장하고 있을 것이다. 이를 효율적으로 관리하기 위해 `BLOB` 이나 `TEXT` 속성의 컬럼을 수직 분할하여 따로 저장하고 있으면 쿼리 성능을 향상 시킬 수 있다. 
+
+예를 들어 `Bugs`라는 DB에 `Product`라는 테이블이 있고 이 테이블은 각 제품의 실행 파일을 담고 있다고 생각 해보자. Windows의 경우 `.exe` 파일을, MacOS의 경우 `.dmg` 파일을 테이블에 저장하고 있을 것이다. 이 설치 파일들은 엄청 크고 무겁기 때문에 하나의 테이블에 모두 저장하는 것이 아니라 일대일 관계를 맺어 수직 분할 하는것이 더욱 효율적일 것이다. 이런 경우 설치 파일이 필요한 경우만 따로 호출하여 결과를 내주면 되기 때문에 쿼리 성능상에도 이점을 가질수 있다.
+
+```sql
+CREATE TABLE Bugs (
+  bug_id SERIAL PRIMARY KEY, -- fixed length data type
+  summary CHAR(80), -- fixed length data type
+  date_reported DATE, -- fixed length data type
+  reported_by BIGINT UNSIGNED, -- fixed length data type
+  FOREIGN KEY (reported_by) REFERENCES Accounts(account_id)
+);
+
+CREATE TABLE BugDescriptions (
+  bug_id BIGINT UNSIGNED PRIMARY KEY,
+  description VARCHAR(1000), -- variable length data type
+  resolution VARCHAR(1000) -- variable length data type
+  FOREIGN KEY (bug_id) REFERENCES Bugs(bug_id)
+);
+```
+
+### 종속 테이블 생성하기
+[이전 챕터](SQL-Antipatterns-8.md)에서 다루었듯이 메타데이터 트리블 안티패턴도 종속 테이블을 활용하여 해결 할 수도 있다.
+```sql
+CREATE TABLE ProjectHistory (
+  project_id BIGINT,
+  year SMALLINT,
+  bugs_fixed INT,
+  PRIMARY KEY (project_id, year),
+  FOREIGN KEY (project_id) REFERENCES Projects(project_id)
+);
+```
+위 DDL처럼 프로젝트당 여러 컬럼을 가지는 것 대신 일대다 관게를 맺어 줌으로써 해결 할 수도 있다. 어찌됐든 수동으로 비슷한 속성의 테이블을 여러번 생성하는 짓은 하지말자.
 
 > 이 글은 [SQL Antipatterns - by Bill Karwin](https://pragprog.com/titles/bksqla/sql-antipatterns/) 영문 원본의 Chapter9 를 요약한 글입니다. 자의적인 해석이 들어 간 것을 참고하셨으면 좋겠습니다.
