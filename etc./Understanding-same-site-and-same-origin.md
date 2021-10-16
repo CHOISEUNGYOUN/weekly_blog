@@ -1,4 +1,4 @@
-## "same-site" 와 "same-origin" 이해하기
+# "same-site" 와 "same-origin" 이해하기
 
 "same-site" 와 "same-origin" 은 빈번하게 언급되지만 사람들이 잘못 이해하고 있는 용어이다. 이 헤더 요소들은 컨텍스트 페이지 트렌지션, fetch() 요청, 쿠기, 팝업창, 소스 임베딩, iframe 등이 호출될 때 함께 나타난다.
 
