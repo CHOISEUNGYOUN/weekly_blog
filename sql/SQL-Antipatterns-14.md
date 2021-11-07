@@ -137,6 +137,21 @@ SELECT * FROM Bugs WHERE assigned_to IS DISTINCT FROM 1;
 ```sql
 SELECT * FROM Bugs WHERE assigned_to IS DISTINCT FROM ?;
 ```
+`IS DISTINCT FROM` 연산의 경우 모든 데이터베이스 제품들이 지원하는 기능은 아니다. PostgreSQL과 IBM DB2, Firebird의 경우 지원을 하지만 Oracle이나 Microsoft SQL Server의 경우 이 기능을 지원하지 않는다. MySQL의 경우 해당 기능을 `<=>` 연산자로 지원한다.
+
+### 컬럼을 NOT NULL로 선언하기
+로우 데이터에 null을 허용하고 싶지않다면 DDL에 `NOT NULL`을 사용하여 선언하는 것이 좋다. 이를 사용하게 된다면 필수인 컬럼 데이터에는 반드시 null이 아닌 해당 타입의 데이터가 들어가야 하기 때문에 훨씬 더 안전하다.
+
+또 다른 경우로 디폴트 값을 모든 컬럼에 지정하는 것을 권하는 사람들이 있는데, 이를 잘못 사용하게 된다면 필수로 입력되어야 하는 데이터에 실제로 추가되어야 할 값이 아니라 기본값이 들어가는 경우가 발생하기 때문에 경우에 따라서 특정 컬럼에만 기본값을 지정하는 것이 좋다.
+
+### 동적 기본값
+주어진 컬럼이나 수식에, 특히 특정 쿼리에서만 디폴트 값을 설정하는 방법이다. COALESCE() 함수 사용하면 아래와 같이 구현 할 수 있다.
+```sql
+SELECT first_name || COALESCE(' ' || middle_initial || ' ', ' ') || last_name
+AS full_name
+FROM Accounts;
+```
+COALESCE() 함수는 SQL 표준 함수이다. 다른 데이터베이스 제품에서는 이와 비슷한 기능으로 `NVL()` 또는 `ISNULL()`을 제공한다.
 
 
 > 이 글은 [SQL Antipatterns - by Bill Karwin](https://pragprog.com/titles/bksqla/sql-antipatterns/) 영문 원본의 Chapter14 를 요약한 글입니다. 자의적인 해석이 들어 간 것을 참고하셨으면 좋겠습니다.
