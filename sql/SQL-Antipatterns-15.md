@@ -124,6 +124,134 @@ GROUP BY b.reported_by;
 하지만 대부분의 데이터베이스 제품에서는 이런 쿼리에 대해 에러를 반환한다. 이는 함수 종속적인 관계를 알아내는게 그리 어려운 일도 아니기도 하고 이런 동작 자체가 SQL 표준에 위배되기 때문이다. 그럼에도 MySQL이나 SQLite를 사용하고 있다면 이런 함수 종속적인 관계를 인지하고 모호한 관계를 만들지 않도록 조심해야 한다.
 
 ## 해결책 - 컬럼을 모호하게 사용하지 않기
-작성중...
+
+### 함수 종속인 컬럼만 조회하기
+가장 직관적인 해결책은 쿼리에서 모호한 컬럼을 제외하는 것이다.
+
+```sql
+SELECT product_id, MAX(date_reported) AS latest
+FROM Bugs JOIN BugsProducts USING (bug_id)
+GROUP BY product_id;
+```
+
+이 쿼리는 가장 최근에 발생한 버그에 대한 `bug_id`를 제공해주진 않지만 각 제품당 발생한 가장 최근의 버그를 반환한다. 이 방식은 가장 간단하면서도 명확하다.
+
+### 상호연관된 서브쿼리 사용하기
+상호 연관된 서브쿼리는 외부쿼리를 참조하기 때문에 외부쿼리를 통해 조회된 각 로우마다 다른 결과를 반환한다. 이를 통해 각 제품 당 발생한 가장 최근의 버그 데이터를 조회할 수 있다. 서브쿼리에서 아무것도 반환하지 않는다면 외부쿼리에서 조회된 버그 데이터가 가장 최근에 발생한 버그가 된다.
+
+```sql
+SELECT bp1.product_id, b1.date_reported AS latest, b1.bug_id
+FROM Bugs b1 JOIN BugsProducts bp1 USING (bug_id)
+WHERE NOT EXISTS
+  (SELECT * FROM Bugs b2 JOIN BugsProducts bp2 USING (bug_id)
+   WHERE bp1.product_id = bp2.product_id
+    AND b1.date_reported < b2.date_reported);
+```
+이 방법은 코드 측면에서 간단하고 가독성이 좋은 해결 방법이다. 하지만 상호연관된 서브쿼리들을 각 로우당 한번씩 외부쿼리로 비교해야되기 때문에 성능적인 측면에서 최선의 방법은 아니다.
+
+### 유도 테이블 사용하기
+`product_id`와 이에 해당되는 가장 최근의 버그의 보고일을 담은 임시결과를 유도 테이블로써 구성하여 해결할수도 있다. 해당 결과를 테이블과 비교 조회하면 결과로 각 제품당 가장 최근에 발생한 버그 값만 불러올 수 있다.
+
+```sql
+SELECT m.product_id, m.latest, b1.bug_id
+FROM Bugs b1 JOIN BugsProducts bp1 USING (bug_id)
+  JOIN (SELECT bp2.product_id, MAX(b2.date_reported) AS latest
+    FROM Bugs b2 JOIN BugsProducts bp2 USING (bug_id)
+    GROUP BY bp2.product_id) m
+  ON (bp1.product_id = m.product_id AND b1.date_reported = m.latest);
+```
+|product_id|latest    |bug_id|
+|----------|----------|------|
+|1         |2010-06-01|2248  |
+|2         |2010-02-16|3456  |
+|2         |2010-02-16|5150  |
+|3         |2010-01-01|5678  |
+
+위 결과에서 볼 수 있듯이 각 제품당 가장 최근에 발생한 버그와 해당 고유키를 반환하고 있다. 각 제품당 하나의 버그만 조회하고 싶다면 아래와 같이 그룹핑을 하면 된다.
+
+```sql
+SELECT m.product_id, m.latest, MAX(b1.bug_id) AS latest_bug_id
+FROM Bugs b1 JOIN
+  (SELECT product_id, MAX(date_reported) AS latest
+   FROM Bugs b2 JOIN BugsProducts USING (bug_id)
+   GROUP BY product_id) m
+  ON (b1.date_reported = m.latest)
+GROUP BY m.product_id, m.latest;
+```
+|product_id|latest    |bug_id|
+|----------|----------|------|
+|1         |2010-06-01|2248  |
+|2         |2010-02-16|5150  |
+|3         |2010-01-01|5678  |
+
+유도 테이블을 사용하는 방법은 위에서 제시한 상호연관된 서브쿼리를 사용하는것 보다 확장성이 좋다. 유도 테이블은 상호 연관 관계가 아니기 때문에 대부분의 데이터베이스에서는 서브쿼리를 한번만 실행해주면 된다. 하지만 데이터베이스에 반드시 임시로 출력한 결과를 임시 테이블로써 저장해둬야하기 때문에 성능 측면에서 가장 좋은 해결책이라고 볼 순 없다.
+
+### JOIN 사용하기
+JOIN을 사용하여 존재하지 않는 로우에 대한 값들을 대조할수도 있다. 이런 방식의 병합을 외부 병합(OUTER JOIN)이라고 부른다. 로우 대조시 데이터가 존재하지 않는 경우 해당 로우의 컬럼값에 `null`이 모두 선언된다. 이를 통해 병합을 할때 매칭된 데이터가 없음을 인지할 수 있다.
+
+```sql
+SELECT bp1.product_id, b1.date_reported AS latest, b1.bug_id
+FROM Bugs b1 JOIN BugsProducts bp1 ON (b1.bug_id = bp1.bug_id)
+LEFT OUTER JOIN (Bugs AS b2 JOIN BugsProducts AS bp2 ON (b2.bug_id = bp2.bug_id))
+  ON (bp1.product_id = bp2.product_id AND (b1.date_reported < b2.date_reported
+    OR b1.date_reported = b2.date_reported AND b1.bug_id < b2.bug_id))
+WHERE b2.bug_id IS NULL;
+```
+
+|product_id|latest    |bug_id|
+|----------|----------|------|
+|1         |2010-06-01|2248  |
+|2         |2010-02-16|5150  |
+|3         |2010-01-01|5678  |
+
+위 쿼리는 직관성이 떨어지기 때문에 이해하는데 시간이 필요할 것이다. 이해하기만 한다면 이런 방식이 유용함을 깨닫게 될 것이다.
+
+이러한 방식은 다량의 세트 데이터를 다룰때 유용하다. 보기에는 복잡하고 어려운 개념으로 보이지만 서브쿼리를 활용하여 해결하는 방식보다 확장성 측면에서 훨씬 더 용이하다. 성능 측면에서도 다른 해결 방식보다 더 좋은 방법이기도 하다.
+
+### 다른 컬럼에 집계 함수 사용하기
+단일 결과의 원칙을 응용하여 집계함수를 활용하여 병합을 할 수도 있다.
+
+```sql
+SELECT product_id, MAX(date_reported) AS latest,
+  MAX(bug_id) AS latest_bug_id
+FROM Bugs JOIN BugsProducts USING (bug_id)
+GROUP BY product_id;
+```
+이 방법은 가장 최근에 발생한 `bug_id`의 `date_reported` 값이 정확한 경우 사용 할 수 있다. 다시 말해 버그 데이터가 시간 순서대로 쌓이는 경우에 사용할 수 있다.
+
+### 각 그룹에 대해 모든 값을 연결하기
+다른 집계 함수를 사용하여 단일 결과 원칙을 위배하지 않고 해결 할 수도 있다. MySQL과 SQLite에서는 `GROUP_CONCAT()` 함수를 지원하는데 이는 그룹에 해당되는 모든 컬럼 값을 하나로 병합해준다. 해당 컬럼은 기본적으로 콤마(`,`)로 분리하도록 설계되어 있다.
+
+```sql
+SELECT product_id, MAX(date_reported) AS latest
+  GROUP_CONCAT(bug_id) AS bug_id_list,
+FROM Bugs JOIN BugsProducts USING (bug_id)
+GROUP BY product_id;
+```
+
+|product_id|latest    |bug_id_list   |
+|----------|----------|--------------|
+|1         |2010-06-01|1234,2248     |
+|2         |2010-02-16|3456,4077,5150|
+|3         |2010-01-01|5678,8063     |
+
+이 결과값은 어떤 `bug_id`가 가장 최근에 발생한 버그인지 구분하지는 못한다. 또다른 문제점은 이 방식은 표준 SQL에 기재되어 있는 방식이 아니라는 점이다. 이 말은 다른 데이터베이스 제품에서는 이러한 방식을 적용 할 수 없다는 것이다. 다른 제품에서 종종 이런 집계를 구현하기 위해 사용자정의 함수를 구현 할 수 있게 지원하는 경우도 있다. 아래의 예시는 PostgreSQL의 사용자정의 함수 예시이다.
+
+```sql
+CREATE AGGREGATE GROUP_ARRAY (
+  BASETYPE = ANYELEMENT,
+    SFUNC = ARRAY_APPEND,
+    STYPE = ANYARRAY,
+  INITCOND = '{}'
+);
+
+SELECT product_id, MAX(date_reported) AS latest
+  ARRAY_TO_STRING(GROUP_ARRAY(bug_id), ',') AS bug_id_list,
+FROM Bugs JOIN BugsProducts USING (bug_id)
+GROUP BY product_id;
+```
+
+다른 데이터베이스에서는 이런 사용자정의 함수 기능을 제공하지 않기 때문에 프로시져를 활용하여 반복문을 실행하여 직접 병합을 시켜줘야 한다. 이 방식은 그룹당 추가 컬럼 데이터가 필요한 경우 단일 결과 원칙을 위배하지 않고 해결할 수 있는 방법이다.
+
 
 > 이 글은 [SQL Antipatterns - by Bill Karwin](https://pragprog.com/titles/bksqla/sql-antipatterns/) 영문 원본의 Chapter15 를 요약한 글입니다. 자의적인 해석이 들어 간 것을 참고하셨으면 좋겠습니다.
