@@ -124,6 +124,95 @@ SELECT * FROM BugsText WHERE BugsText MATCH 'crash -save';
 (책에서 소개해주는 검색엔진에 대한 설명은 생략하겠다.)
 
 ### 직접 검색 엔진 구성하기
-작성중...
+써드파티 소프트웨어를 사용하는것을 원하지 않거나 검색엔진만을 위한 의존성을 설치하는 것을 원하지 않는다면 직접 구현해보는 것 또한 방법이 될 수 있다. 대신 효율적이면서 데이터베이스 독립적으로 구현해야 할 것이다. 이 섹션에서는 역색인(inverted index)이라고 불리는 디자인을 구성할 예정이다. 기본적으로 역색인은 검색할만한 단어들의 집합이다. 다대다 관계를 통해 해당 인덱스들은 관련성 있는 단어들과 텍스트들을 연관관계를 맺어줄 것이다. 예를 들면 `crash`라는 단어는 수많은 버그 메세지에서 나타날 수 있는 단어이다. 또한 각 버그들은 다른 많은 키워드들과 매칭 될 수 있다. 이번 섹션에서는 이런 경우들에 대해 대응 할 수 있는 역색인을 어떻게 디자인 할 수 있는지 보여주려고 한다.
+
+우선 사용자들이 검색할만한 키워드의 집합인 `Keywords` 테이블과 `Bugs` 테이블과 `Keywords` 테이블을 이어줄 수 있는 `BugsKeywords` 중계 테이블을 선언한다.
+
+```sql
+CREATE TABLE Keywords (
+  keyword_id SERIAL PRIMARY KEY,
+  keyword VARCHAR(40) NOT NULL,
+  UNIQUE KEY (keyword)
+);
+
+CREATE TABLE BugsKeywords (
+  keyword_id BIGINT UNSIGNED NOT NULL,
+  bug_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (keyword_id, bug_id),
+  FOREIGN KEY (keyword_id) REFERENCES Keywords(keyword_id),
+  FOREIGN KEY (bug_id) REFERENCES Bugs(bug_id)
+);
+```
+
+그 다음엔 `BugsKeywords` 테이블에 주어진 버그와 매칭 될 수 있는 모든 단어들을 로우로 추가한다. `LIKE`나 정규표현식을 활용하여 매칭되는 부분 문자열들을 
+추출하여 추가하면 된다. 이 경우에는 우리가 안티패턴이라고 언급했던 방식과 별반 다르지 않는 성능을 보여주지만 부분 문자열을 추출하는 순간에만 사용하면 되기 때문에 효율적으로 사용할 수 있다. 결과 데이터를 중계테이블에 저장한 이후에는 동일한 단어를 훨씬 더 빠르게 검색 할 수 있다.
+
+이 다음으로는 저장 프로시져를 만들어서 주어진 단어를 더 효율적으로 검색할 수 있도록 구현하면 된다. 이미 검색한 적이 있는 단어라면 해당 쿼리는 더 빨리 검색을 수행하게 되는데 이는 `BugsKeywords` 테이블에 이미 한번이라도 검색 요청한 단어들이 저장되어 있기 때문이다. 만약 한번도 검색되지 않은 단어라면 단어 리스트에서 있는지 전체 검색 한 다음 추가하는 절차를 만들어야 한다.
+
+```sql
+CREATE PROCEDURE BugsSearch(keyword VARCHAR(40))
+BEGIN
+  SET @keyword = keyword;
+
+  # step1
+  PREPARE s1 FROM 'SELECT MAX(keyword_id) INTO @k FROM Keywords
+    WHERE keyword = ?';
+  EXECUTE s1 USING @keyword;
+  DEALLOCATE PREPARE s1;
+
+  IF (@k IS NULL) THEN
+    # step2
+    PREPARE s2 FROM 'INSERT INTO Keywords (keyword) VALUES (?)';
+    EXECUTE s2 USING @keyword;
+    DEALLOCATE PREPARE s2;
+    # step3
+    SELECT LAST_INSERT_ID() INTO @k;
+
+    # step4
+    PREPARE s3 FROM 'INSERT INTO BugsKeywords (bug_id, keyword_id)
+      SELECT bug_id, ? FROM Bugs
+      WHERE summary REGEXP CONCAT(''[[:<:]]'', ?, ''[[:>:]]'')
+        OR description REGEXP CONCAT(''[[:<:]]'', ?, ''[[:>]]'')';
+    EXECUTE s3 USING @k, @keyword, @keyword;
+    DEALLOCATE PREPARE s3;
+  END IF;
+
+  # step5
+  PREPARE s4 FROM 'SELECT b.* FROM Bugs b
+    JOIN BugsKeywords k USING (bug_id)
+    WHERE k.keyword_id = ?';
+  EXECUTE s4 USING @k;
+  DEALLOCATE PREPARE s4;
+END
+```
+
+1. 사용자가 정의한 키워드를 검색한다. `Keywords.keyword_id` 고유키 값을 반환하거나 해당 키워드가 검색 된 적이 없다면 `null`을 반환한다.
+2. 해당 키워드를 찾지 못한경우 새로운 단어로 추가한다.
+3. 새로 추가된 키워드의 고유키 값을 반환한다.
+4. 중계테이블에 새로 추가된 키워드와 매칭되는 `Bugs` 로우를 찾아 해당 고유키들을 추가한다.
+5. 위 작업을 거치고 나면 해당 키워드의 고유키와 관계를 가지고 있는 `Bugs` 로우들을 찾을 수 있다.
+
+해당 프로시져를 실행하면 우리가 원하는 결과를 얻을 수 있게 된다. 이 프로시져를 통해 버그 테이블에서 해당 키워드와 매칭되는 로우를 찾는 작업과 새 키워드를 추가하는 작업을 수행함과 동시에 이미 한번이라도 검색 된적이 있는 키워드는 바로 중계 테이블을 통해 결과를 볼수 있게 되었다.
+
+```sql
+CALL BugsSearch('crash');
+```
+
+또 하나 해줘야 할 작업은 트리거를 정의하여 새로운 버그가 추가될 때 마다 중계 테이블에 해당 버그를 등록해주는 작업을 해줘야한다. 만약 버그 데이터를 수정하는 작업이 필요하다면 수정작업에도 동일하게 트리거를 적용해줘야 한다.
+
+```sql
+CREATE TRIGGER Bugs_Insert AFTER INSERT ON Bugs
+FOR EACH ROW
+BEGIN
+  INSERT INTO BugsKeywords (bug_id, keyword_id)
+    SELECT NEW.bug_id, k.keyword_id FROM Keywords k
+    WHERE NEW.description REGEXP CONCAT('[[:<:]]', k.keyword, '[[:>:]]')
+        OR NEW.summary REGEXP CONCAT('[[:<:]]', k.keyword, '[[:>:]]');
+END
+```
+
+이렇게 구성하면 사용자가 매번 검색할 때마다 자연스립게 키워드가 추가되기 때문에 손으로 직접 키워드 리스트를 만들어서 추가할 필요가 없어진다. 다시 말해 초기에 단어 등록할 때 성능 저하만 감수하면 효율적으로 검색을 할 수 있게 도와줄 수 있게된다.
+
+필자는 역색인 디자인을 통해 검색 시스템을 구현해서 현재까지 사용하고 있다. 여기에 `num_searches` 컬럼을 `Keywords` 테이블에 추가하여 각 단어들이 얼마나 자주 검색되는지도 확인하고 있다.
 
 > 이 글은 [SQL Antipatterns - by Bill Karwin](https://pragprog.com/titles/bksqla/sql-antipatterns/) 영문 원본의 Chapter17 를 요약한 글입니다. 자의적인 해석이 들어 간 것을 참고하셨으면 좋겠습니다.
