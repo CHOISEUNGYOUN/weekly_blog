@@ -85,4 +85,88 @@ GROUP BY p.product_id;
 
 위 쿼리의 집계 결과는 우리가 예상한 대로 12개의 `fixed` 로우와 7개의 `open` 로우를 반환한다.
 
+아마 이런 세련되지 못한 해결책을 마음에 들어 하지 않을 수도 있을 것이다. 하지만 개발 생산성, 유지보수성, 성능 모두를 감안하더라도 위 방식이 가장 적절한 해결책이다. 그 이유를 아래에서 살펴보자
+
+1. 위 쿼리는 원하지 않는 곱집합 연산이 일어나지 않기 때문에 정확한 결과를 가져다준다.
+2. 새로운 조건이 필요한 경우 간단히 또 다른 쿼리를 작성하여 추가하면 되기 때문에 유지보수성이 좋다.
+3. SQL엔진은 복잡한 쿼리보다 간단한 쿼리를 더욱 더 잘 최적화 시켜준다. 중복되는 작업을 하기 때문에 비효율적인것 같지만 사실상 그렇지 않다는 것이다.
+4. 코드리뷰나 팀원 트레이닝을 하는 경우 분할하여 간단하게 보여주는 것이 훨씬 직관적이고 설명하기에도 용이하다.
+
+### UNION 활용하기
+같은 테이블의 다른 필터 조건의 결과들을 `UNION`을 활용하여 하나의 결과로 뽑아 낼 수 있다. 정렬과 같은 문제 때문에 하나의 쿼리로 하나의 결과 집합을 반환하기를 원한다면 이 방법이 유용하다.
+
+```sql
+(SELECT p.product_id, f.status, COUNT(f.bug_id) AS bug_count
+ FROM BugsProducts p
+ LEFT OUTER JOIN Bugs f ON (p.bug_id = f.bug_id AND f.status = 'FIXED')
+ WHERE p.product_id = 1
+ GROUP BY p.product_id, f.status)
+
+UNION ALL
+
+(SELECT p.product_id, o.status, COUNT(o.bug_id) AS bug_count
+ FROM BugsProducts p
+ LEFT OUTER JOIN Bugs o ON (p.bug_id = o.bug_id AND o.status = 'OPEN')
+ WHERE p.product_id = 1
+ GROUP BY p.product_id, o.status)
+
+ORDER BY bug_count;
+```
+해당 쿼리는 두개의 서브쿼리의 결과 집합을 하나로 통합하여 반환한다. 위 예시에서는 각 서브쿼리마다 하나의 로우만 반환하기 때문에 총 2개의 로우를 반환한다. 각 로우에 어떤 서브쿼리의 결과인지 나타낼 수 있는 컬럼이 필수인데, 이 예시에서는 해당 역할을 `status` 컬럼을 통해 구분 할 수 있다.
+
+`UNION` 명렁어는 두 서브쿼리 모두 호환이 가능한 경우(컬럼이 동일한 경우)에만 사용 가능하다. 컬럼의 갯수, 명칭, 데이터 타입과 같은 것들은 결과 집합에서 변경 할 수 없기 때문에 통합되는 로우들의 컬럼 값이 균일하고 정확한지 확인해야한다.
+
+### 요청사항 각각 분리하여 해결하기
+프로젝트에서 갑자기 급한 문제가 있다면 어떻게 해결하겠는가? 예를 들어 당신의 상사가 급하게 현재 개발현황, 개발자 현황, 버그 현황과 같은 데이터를 요청한다면 말이다. 가장 좋은 해결책은 요청사항 별로 해결하는 것이다.
+
+```sql
+# 제품 수
+SELECT COUNT(*) AS how_many_products
+FROM Products;
+
+# 버그 수정 현황 집계
+SELECT COUNT(DISTINCT assigned_to) AS how_many_developers
+FROM Bugs
+WHERE status = 'FIXED';
+
+# 개발자당 버그 수정 평균값
+SELECT AVG(bugs_per_developer) AS average_bugs_per_developer
+FROM (SELECT dev.account_id, COUNT(*) AS bugs_per_developer
+      FROM Bugs b JOIN Accounts dev
+        ON (b.assigned_to = dev.account_id)
+      WHERE b.status = 'FIXED'
+      GROUP BY dev.account_id) t;
+
+# 고객에게 버그 수정 보고가 나간 횟수 집계
+SELECT COUNT(*) AS how_many_customer_bugs
+FROM Bugs b JOIN Accounts cust ON (b.reported_by = cust.account_id)
+WHERE b.status = 'FIXED' AND cust.email NOT LIKE '%@example.com';
+```
+특정 쿼리들은 쿼리 그자체로 이미 복잡하다. 이를 한번에 뽑아내려고 한다면 지옥을 맛보게 될것이다.
+
+### 자동생성 SQL 활용하기
+복잡한 쿼리를 분할하려고 하는 경우 발생하는 문제는 비슷하거나 데이터 값이 살짝 다른 문제 때문에 비슷한 쿼리를 여러번 작성해야 되는 것이다. 이렇게 쿼리를 작성하는 것은 개발자로써 고역이 아닐수 없으므로 어플리케이션에서 쿼리를 만들어내는것이 효율적이다.
+
+[코드 제네레이션(Code generation)](https://en.wikipedia.org/wiki/Code_generation_(compiler))은 컴파일하거나 실행할 수 있는 새 코드를 생성할 수 있게 하는 코드를 작성하는 테크닉이다. 이는 새로운 코드를 직접 작성하는 것이 매우 피곤한 작업인 경우 유용하다. 코드 제네레이터를 만들면 반복작업을 없앨 수 있다.
+
+```sql
+SELECT CONCAT('UPDATE Inventory '
+  ' SET last_used = ''', MAX(u.usage_date), '''',
+  ' WHERE inventory_id = ', u.inventory_id, ';') AS update_statement
+FROM ComputerUsage u
+GROUP BY u.inventory_id;
+```
+
+위 예시는 여러 테이블을 한번에 업데이트 하는 코드 제네레이터를 작성한 코드이다. 위 코드를 실행하면 아래와 같은 쿼리가 만들어진다.
+```sql
+# update_statement
+UPDATE Inventory SET last_used = ’2002-04-19’ WHERE inventory_id = 1234;
+UPDATE Inventory SET last_used = ’2002-03-12’ WHERE inventory_id = 2345;
+UPDATE Inventory SET last_used = ’2002-04-30’ WHERE inventory_id = 3456;
+UPDATE Inventory SET last_used = ’2002-04-04’ WHERE inventory_id = 4567;
+...
+```
+
+많은 쿼리문을 작성하거나 실행하는 것은 작업의 요구사항을 맞추는데 가장 효율적인 방법이 아닐수도 있다. 그래도 작업의 효율성과 작업을 요구사항에 맞추어 끝내는 것 두가지 모두 고려하고 균형을 맞추는것이 좋다.
+
 > 이 글은 [SQL Antipatterns - by Bill Karwin](https://pragprog.com/titles/bksqla/sql-antipatterns/) 영문 원본의 Chapter18 를 요약한 글입니다. 자의적인 해석이 들어 간 것을 참고하셨으면 좋겠습니다.
