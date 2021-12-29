@@ -33,6 +33,7 @@
 * [SQL Antipatterns Chapter17](sql/SQL-Antipatterns-17.md)
 * [SQL Antipatterns Chapter18](sql/SQL-Antipatterns-18.md)
 * [SQL Antipatterns Chapter19](sql/SQL-Antipatterns-19.md)
+* [SQL Antipatterns Chapter20](sql/SQL-Antipatterns-20.md)
 
 # Etc.
 * [Hunting for great names in programming](etc./Hunting-for-great-names-in-programming.md)
