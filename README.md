@@ -13,6 +13,7 @@
 * [Rails 6 adds support for multi environment credentials](ruby-on-rails/Rails-6-adds-support-for-multi-environment-credentials.md)
 * [Tip: Building lightweight components with Rails Helpers and Stimulus](ruby-on-rails/building-lightweight-components-with-rails-helpers-and-stimulus.md)
 * [Tip: Automatically cast params with the Rails Attributes API](ruby-on-rails/automatically-cast-params-with-the-rails-attributes-api.md)
+* [Metaprogramming With Ruby: Send and Public Send Methods](ruby-on-rails/metaprogramming-with-ruby-send-and-public-send-methods.md)
 
 # SQL
 * [SQL Antipatterns Chapter2](sql/SQL-Antipatterns-2.md)
