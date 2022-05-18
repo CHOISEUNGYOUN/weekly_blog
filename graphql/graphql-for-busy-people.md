@@ -128,16 +128,13 @@ Apollo와 같은 GraphQL 클라이언트는 Scala, Swift 또는 TypeScript와 �
 
 각각의 리졸버들 또한 필터링 또는 페이지네이션 변수와 같이 쿼리에 전달된 모든 인자들을 처리한다. 해당 인자들 또한 속성 검사 및 적절한 리졸버에서 실행되었는지 여부를 확인하는 등 쿼리에 사용되는 필드들과 비슷하게 다루어진다.
 
-Our root level query is cities, so we will initially execute the resolver for cities, and then move downward, executing resolvers for each field in the schema definition. The execution will wait until all the resolvers are finished, at which point the data will be returned in the response.
+최상위 레벨의 쿼리는 `cities` 이기 때문에 `cities`에 대한 리졸버들이 초기에 실행될 것이며 차례로 내려가면서 스키마 정의에 기록되어 있는 각 필드의 리졸버들이 실행 될 것이다. 요청의 결과값으로 나오게 될 데이터들은 모든 리졸버들이 완료될때 까지 기다린 이후 보내게 된다.
 
-As you might imagine, we could easily run into situations where we are querying duplicate data, like if we fetched the same adventurer from the database multiple times. There are many strategies to avoid making duplicate requests, including caching and batching. Additionally, in order to avoid infinite loops or overly complex queries (like ones that are deeply nested or excessively large), depth limits and field constraints can be set for each query.
+여기서 우려되는 될만한 소지는 사용자 필드를 데이터베이스에서 여러번 가져오는것과 같이 데이터를 중복으로 가져올수 있다는 점이다. 이 문제는 캐싱이나 배칭과 같이 여러 전략들로 해결할 수 있다. 또한 무한 루프나 너무 복잡한 쿼리를 호출하는 것을 피하기 위해 깊이의 제한을 두거나 각 쿼리별로 필드 제한을 설정할 수도 있다.
 
-## 4. The client receives the response and updates client-side state.
+## 4. 클라이언트에서 데이터 수신 및 클라이언트 상태 업데이트
 
-At this point, our request has been validated and resolved by the server, and only the information the client asked for, with no extraneous fields or associations, is returned.
-
-This is one of the major benefits of GraphQL: data management on the front-end can be moved to the component level. Each front-end component can decide what data it needs locally, create the appropriate query snippet, pass that to a GraphQL client, and then manage its data and state locally. Pushing down the data management to the component level has replaced application state management libraries like Redux.
-
+이 시점에서 요청이 검증되고 서버에서 클라이언트에서 요청한 결과를 [오버페칭이나 언더페칭 없이](https://stackoverflow.com/questions/44564905/what-is-over-fetching-or-under-fetching)딱 필요한 만큼 수신하게 된다. 이는 GraphQL의 가장 큰 장점으로써 프론트엔드의 데이터 관리를 컴포넌트 레벨에서 다룰 수 있게 한다. 프론트엔드의 각 컴포넌트들은 해당 구역에서 필요한 데이터들을 적절한 쿼리 스니펫을 작성하여 GraphQL 클라이언트에 전달할 수 있으며 이를 해당 구역에서만 관리 하면 된다. 데이터 관리를 컴포넌트 레벨로 내리게 되면 Redux와 같이 어플리케이션 상태 관리를 할 필요가 없게된다.
 
 Original Source:
 [There and Back Again, A GraphQL Lifecycle Tale](https://thoughtbot.com/blog/graphql-for-busy-people)
