@@ -14,6 +14,7 @@
 * [Tip: Building lightweight components with Rails Helpers and Stimulus](ruby-on-rails/building-lightweight-components-with-rails-helpers-and-stimulus.md)
 * [Tip: Automatically cast params with the Rails Attributes API](ruby-on-rails/automatically-cast-params-with-the-rails-attributes-api.md)
 * [Metaprogramming With Ruby: Send and Public Send Methods](ruby-on-rails/metaprogramming-with-ruby-send-and-public-send-methods.md)
+* [Using Named Scopes Across Models with ActiveRecord#Merge](ruby-on-rails/activerecord-merge.md)
 
 # GraphQL
 * [There and Back Again, A GraphQL Lifecycle Tale](graphql/graphql-for-busy-people.md)
