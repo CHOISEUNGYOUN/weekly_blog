@@ -7,20 +7,19 @@
 하지만 기본적으로 제공해주는 제네레이터가 모든 문제를 해결해주진 않는다. 아마 제네레이터를 수정하거나 새로운 제네레이터를 만들어야 할 필요가 있을 것이다. 이번 글에서 제네레이터를 어떻게 만들어내는지 살펴보고자 한다. 특히 레일즈에서 템플릿을 활용하여 커스텀 제네레이터를 만드는 것을 중점적으로 다루고자 한다.
 
 ## 레일즈 제네레이터란 무엇인가?
-Not to be confused with generator functions (which you might be familiar with from Python or Javascript), Rails generators are custom [Thor](https://github.com/rails/thor) commands that focus on, well, generating things.
+파이썬이나 자바스크립트에서 제공해주는 제네레이터 함수와는 다르게 레일즈 제네레이터는 커스텀 [Thor](https://github.com/rails/thor)커멘드를 생성하는 것을 의미한다.
 
-There are lots of examples. You'll likely be familiar with the model generator (`rails generate model`) for creating new ActiveRecord models or the migration generator (`rails generate migration`) for generating new migrations. There is also `rails generate generator` which — you guessed it — creates a new generator!
+여러 예시가 있겠지만 대표적으로 `rails generate model`을 사용하여 ActiveRecord의 모델을 생성하거나 `rails generate migration`을 사용하여 마이그레이션 파일을 생성하는 커맨드가 있다. 또한 `rails generate generator`를 사용하면 새로운 제네레이터를 생성할 수도 있다.
 
-Generators can call each other — for example, `rails scaffold` will call numerous other generators — and provide methods to create or modify files, install gems, run specific rake tasks, and much more. Let's create a simple model spec generator to understand how this works.
+제네레이터는 서로 다른 제네레이터를 호출할수도 있다. 예를 들어 `rails scaffold`의 경우에는 다른 여러 제네레이터를 함께 호출한다. 이를 통해 파일을 생성하거나 수정 할 수도 있으며, 젬 설치, 특정 rake 작업을 수행할수도 있고 이외 기타 다른 작업들도 수행하게 할 수 있다. 어떻게 동작하는지 이해를 돕기위해 간단한 모델을 생성하는 spec 제네레이터를 작성해보았다.
 
-## Creating Your Own Generator in Ruby on Rails
-Run the following:
+## Ruby on Rails에서 커스텀 제네레이터를 생성하기
 
 ```zsh
 rails generate generator model_spec
 ```
 
-This will create several new files in `/lib/generators/model_spec.` We can modify `model_spec_generator.rb` in folder `lib/generators/model_spec/` to create a model spec file in the correct directory:
+위 커맨드를 입력하면 `/lib/generators/model_spec.`에서 몇가지 새로운 파일들이 생성된다. `lib/generators/model_spec/`에 있는 `model_spec_generator`를 수정하여 모델 spec 파일을 해당 경로에 생성하도록 할 수 있다.
 
 ```rb
 class ModelSpecGenerator < Rails::Generators::NamedBase
@@ -32,9 +31,10 @@ class ModelSpecGenerator < Rails::Generators::NamedBase
   end
 end
 ```
-The `template` command will look for a template file in the `lib/generators/model_spec/templates` directory and render it to the specified location — the `spec/models` directory. The command will replace ERB-style variables found in the template file.
 
-By setting the `source_root`, we let our generator know where it can find referenced template files. Template `model_spec.rb` in folder `lib/generators/model_spec/templates/` could look like this:
+`template` 커맨드는 `lib/generators/model_spec/templates` 경로에 위치한 템플릿 파일을 찾아 특정 위치에 렌더링 하게 된다. 여기서는 `spec/models` 경로가 될 것이다. 이후 템플릿 파일에 있는 ERB 스타일의 변수를 대체하게 된다.
+
+`source_root`를 지정해놓게되면 해당 제네레이터는 어떤 템플릿 파일을 참조할지 지정할 수 있다. `lib/generators/model_spec/tempates/` 경로에 위치한 `model_spec.rb` 파일 템플릿은 아래와 같은 모습이다.
 
 ```rb
 require 'rails_helper'
@@ -43,13 +43,14 @@ RSpec.describe <%= class_name %>, :model
   pending "add some examples to (or delete) #{__FILE__}"
 end
 ```
-Once you have created that file, you can run the generator to create a new spec file.
+위 파일을 생성하게 되면, 제네레이터는 해당 템플릿을 참조하여 새로운 spec 파일을 생성한다.
 
-```rb
+```zsh
 rails generate model_spec mymodel
 ```
-Many gems ship with generators such as this one. In fact, we created a simplified version of the generator [Rspec ships with](https://relishapp.com/rspec/rspec-rails/docs/generators). [FactoryBot has a generator](https://github.com/thoughtbot/factory_bot_rails#generators) for factories. There are many more examples.
+많은 루비 젬들이 위 예시와 비슷한 구조의 제네레이터를 함께 제공하고 있다. 가장 간단한 구조의 제네레이터는 [Rspec 제네레이터](https://relishapp.com/rspec/rspec-rails/docs/generators)와 [FactoryBot 제네레이터](https://github.com/thoughtbot/factory_bot_rails#generators)를 꼽을 수 있다. 이외에도 다른 여러 제네레이터를 제공하는 젬들이 있다.
 
+해당 젬들이 제공하는 제네레이들은 위 예시로 든 제네레이터보다 훨씬 간결하고 실용적이다.
 The generators in various gems are more sophisticated than the one we created. We could make our generator take arguments or even hook it into existing generators such as `rails scaffold`. Refer to the [Rails generators documentation](https://guides.rubyonrails.org/generators.html#customizing-your-workflow) if you want to learn more.
 
 So generators have the potential to simplify your workflow in an existing application. But can we also use generators to customize setting up a new application?
