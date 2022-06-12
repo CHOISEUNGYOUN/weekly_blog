@@ -50,53 +50,52 @@ rails generate model_spec mymodel
 ```
 많은 루비 젬들이 위 예시와 비슷한 구조의 제네레이터를 함께 제공하고 있다. 가장 간단한 구조의 제네레이터는 [Rspec 제네레이터](https://relishapp.com/rspec/rspec-rails/docs/generators)와 [FactoryBot 제네레이터](https://github.com/thoughtbot/factory_bot_rails#generators)를 꼽을 수 있다. 이외에도 다른 여러 제네레이터를 제공하는 젬들이 있다.
 
-해당 젬들이 제공하는 제네레이들은 위 예시로 든 제네레이터보다 훨씬 간결하고 실용적이다.
-The generators in various gems are more sophisticated than the one we created. We could make our generator take arguments or even hook it into existing generators such as `rails scaffold`. Refer to the [Rails generators documentation](https://guides.rubyonrails.org/generators.html#customizing-your-workflow) if you want to learn more.
+해당 젬들이 제공하는 제네레이들은 위 예시로 든 제네레이터보다 훨씬 간결하고 실용적이다. [레일즈 제네레이터 문서](https://guides.rubyonrails.org/generators.html#customizing-your-workflow)를 참고하면 개발하면서 필요한 제네레이터를 직접 구현 할 수 있다.
 
-So generators have the potential to simplify your workflow in an existing application. But can we also use generators to customize setting up a new application?
+제네레이터는 현재 구현된 앱을 좀 더 간편하게 개발 할 수 있도록 도와준다. 이 뿐만 아니라 새로운 어플리케이션을 만들기 위해 제네레이터를 커스터마이징 하기를 원한다면 지금부터 언급하는 예제를 잘 살펴보자.
 
-Enter templates!
+## Ruby on Rails 의 템플릿
+이름에서 볼 수 있듯이 템플릿은 어플리케이션 설정을 커스터마이징 하기 위한 파일이다. 앞에서 먼저 언급된 템플릿 파일과는 다른 것이니 혼동되지 않았으면 좋겠다. 이 템플릿 파일은 특정 목적을 위한 제네레이터를 구현하기 위해 필요한 요소이다. 더 자세한 내용은
+[template API 문서](https://guides.rubyonrails.org/rails_application_templates.html#template-api)를 참고하도록 하자. 제네레이터와는 완전히 동일하지 않으나 목적 그 자체는 비슷하다.
 
-## Templates in Ruby on Rails
-As the name suggests, templates are files for customizing your application setup. Don't confuse these with the template files that we previously discussed! Under the hood, they are just generators with a specific purpose, as evidenced by the [template API](https://guides.rubyonrails.org/rails_application_templates.html#template-api). While not exactly identical to generators, they are very similar.
-
-If you have an existing template file, you can use it like so:
+템플릿 파일이 있다면 아래 커멘드를 사용하면 된다.
 
 ```zsh
 rails new myapp -m mytemplate.rb
 ```
 
-Rather than specifying a local file, you may also specify a URL. This is especially useful as it allows you to share application templates.
+로컬 파일을 가리키는 대신 URL을 사용할 수도 있다. 이는 어플리케이션 템플릿을 공유하고자 할 때 특히 유용하다.
 
 ```zsh
 rails new myapp -m https://gist.github.com/appsignal/12345/raw/
 ```
 
-You are not limited to using templates when running rails new either. If you've already set up an app, you can apply templates afterward by executing:
+템플릿 파일은 새로운 레일즈 어플리케이션을 만들때만 유용한 것이 아니라 이후에 템플릿을 적용할 때에도 유용하다.
 
 ```zsh
 rails app:template LOCATION=http://example.com/template.rb
 ```
 
-Templates can be extremely useful. Who doesn't want to automate adding the same couple of gems and making the same configuration changes every time they create a new app? Creating your own application template is great fun — even if it doesn't save a lot of time in the long run.
+위와 같이 템플릿은 매우 유용한 툴이다. 새로운 젬을 자동으로 추가하고 새로운 어플리케이션을 만들때마다 동일한 환경설정을 구성해 주는데 원하지 않는 사람이 있을까? 커스텀 어플리케이션 템플릿을 만드는 것은 언제나 즐거운 일이다.
 
-## Creating Your Own Template in Rails
-We now know about generators and how to use templates. Let's create a simple application template to automate some setup steps.
+## Rails 에서 커스텀 템플릿 만들기
+위에서 제네레이터가 어떤 역할을하고 템플릿을 어떻게 사용하는지 배우게 되었다. 이제는 간단한 어플리케이션 템플릿을 만들어 몇가지 설정을 자동화 하는 것을 살펴보자.
 
-How you set up your Rails app is very much down to personal preference, but here's an example:
+레일즈 어플리케이션을 셋업하는 것은 개개인별로 다를 수 있지만 이번 예제에서는 아래의 방법으로 진행하고자 한다.
 
-1. Install the dotenv gem.
-2. Create a `.env.development` file for the development environment.
-3. Adapt the database configuration file to use environment variables.
-4. Optionally [install and set up Rspec](https://github.com/rspec/rspec-rails).
-Let's create a local file — `mytemplate.rb` — and add `dotenv` using the `gem` command.
+1. dotenv 젬을 설치한다.
+2. 개발환겨을 위한 `.env.development` 파일을 생성한다.
+3. 환경변수를 적용하기 위해 데이터베이스 설정을 가져온다.
+4. 필요하다면 [Rspec 을 설치하고 설정](https://github.com/rspec/rspec-rails) 한다.
+`mytemplate.rb` 로컬 파일을 만들고 `dotenv` 젬을 추가하자.
 
 ```rb
 gem 'dotenv-rails', groups: [:development, :test]
 ```
-As we've just added the dotenv gem, let's also create a `.env.development` file to contain our database configuration.
 
-You can create a new file with specific content by using `create_file`. You won't find this in the template or generator documentation, as the method is supplied by Thor. You might also come across the alias `file`. Application templates are evaluated in the context of `Rails::Generators::AppGenerator`, and that's exactly [where the file alias is defined](https://github.com/rails/rails/blob/8f39fbe18a57ae74513edc8561c00a369fe10f08/railties/lib/rails/generators/rails/app/app_generator.rb#L522).
+`dotenv`젬 파일을 추가했다면 `.env.development` 파일도 생성해서 데이터베이스 설정도 해당 파일에 기록하자.
+
+이제 `create_file` 커멘드를 사용해서 특정 컨텐츠를 포함한 새로운 파일을 생성 할 수 있다. 이 메소드는 `Thor`에 의해 지원되고 있기 때문에 템플릿이나 제네레이터 문서에서는 찾아볼 수 없을 것이다. 어플리케이션 템플릿은 `Rails::Generators::AppGenerator` 컨텍스트를 참조하여 평가를 하게되는데 이 때 [파일 별칭(file alias)](https://github.com/rails/rails/blob/8f39fbe18a57ae74513edc8561c00a369fe10f08/railties/lib/rails/generators/rails/app/app_generator.rb#L522)이 정의된다.
 
 ```rb
 create_file '.env.development', <<~TXT
@@ -106,9 +105,9 @@ create_file '.env.development', <<~TXT
 TXT
 ```
 
-The `app_name` variable contains the first argument of `rails new`. Using this variable, we can ensure our config file matches the generated application.
+`app_name` 변수는 `rails new` 의 첫번째 인자값을 가지고 있다. 이 변수를 사용해서 설정파일이 생성된 어플리케이션과 일치하는지 보장할 수 있게 된다.
 
-Next, let's use our environment variables to connect to the database. We could overwrite the entire `config/database.yml` using the `create_file` command, but let's modify it instead using [inject_into_file](https://guides.rubyonrails.org/generators.html#inject-into-file).
+다음으로 데이터베이스에 연결하기 위해 환경변수들을 이용해보자. `create_file` 커멘드를 사용하여 `config/database.yml` 파일 전체를 다시 쓸 수 있지만 그 대신 [inject_into_file](https://guides.rubyonrails.org/generators.html#inject-into-file)을 사용하여 변경을 해보자.
 
 ```rb
 inject_into_file 'config/database.yml', after: /database: #{app_name}_development\n/ do <<-RUBY
@@ -118,9 +117,9 @@ inject_into_file 'config/database.yml', after: /database: #{app_name}_developmen
   RUBY
 end
 ```
-We can use both strings or regex with the `after` argument to specify where to inject content.
+문자열 또는 정규표현식의 `after` 인자를 사용하여 어디에 컨텐츠를 주입할지 명시 할 수 있다.
 
-Of course, using this kind of configuration only makes sense if a user isn't creating an application with SQLite. You can check for the presence of certain arguments by using the `options` variable. It's best you read the [source code of Rails' app generator](https://github.com/rails/rails/blob/8f39fbe18a57ae74513edc8561c00a369fe10f08/railties/lib/rails/generators/database.rb#L14) to see which options are available.
+물론 이런 설정은 SQLite를 이용하여 어플리케이션을 만들지 않는 이상 필요하진 않을 것이다. 특정 인자의 존재 여부를 `options` 변수를 사용하여 확인할 수 있다. 어떤 옵션들이 사용 가능한지를 확인하고 싶다면 [레일즈 어플리케이션 제네레이터의 소스코드를 확인하는 것이 가장 좋다.](https://github.com/rails/rails/blob/8f39fbe18a57ae74513edc8561c00a369fe10f08/railties/lib/rails/generators/database.rb#L14)
 
 ```rb
 if options[:database] != 'sqlite3'
@@ -128,7 +127,7 @@ if options[:database] != 'sqlite3'
 end
 ```
 
-Last but not least, let's also allow users to install Rspec if they want to. There are various methods for taking user input and creating interactive templates. The `yes?` method asks a user for confirmation:
+마지막으로 필수는 아니지만 원하는 경우 Rspec을 설치하도록 허용해보자. 사용자 입력값을 받고 대화형 템플릿(interactive template)을 만드는 방법에는 여러 가지가 있다. 여기서 `yes?` 메소드는 사용자의 확인을 받는다.
 
 ```rb
 if yes?('Would you like to install Rspec?')
@@ -137,14 +136,14 @@ if yes?('Would you like to install Rspec?')
 end
 ```
 
-We already know the `gem` method, but `generate` and `after_bundle` are new.
+`gem` 메소드는 이미 알고 있지만, `generate` 와 `after_bundle`은 우리가 알지 못한 새로운 메소드들이다.
 
-As mentioned before, Rspec adds its own generators, and you can call these generators (or any other ones, for that matter) directly from your template. But there is a catch — gems specified with the `gem` method are only installed at the end of the template. Calling `generate` with a generator supplied by such a gem would fail — which is why you should register the command as a callback with `after_bundle`.
+앞서 언급했듯이 Rspec은 내부에 제네레이터가 따로 있기 때문에 템플릿에서 해당 제네레이터를 바로 불러올 수 있다. 하지만 여기서 조건은 `gem` 메소드로 지정한 젬들만 템플릿에 추가된다는 점이다. 해당 젬을 참조하지 않고 `generate`를 제네레이터를 이용하여 호출하게 되면 실패 할 것이다. 이로 인해 `after_bundle` 콜백을 이용하여 해당 커맨드를 입력해야 한다.
 
-Note: Before we wrap up, a quick word about creating or modifying files. We used `create_file` and `inject_into_file`, but there are many other options. You may come across `copy_file` or `template` when reading different templates. I did not mention them here to keep things simple. If you want to create more advanced templates, you should know that these other methods for dealing with files exist.
+*참고: 마무리 하기 전에 파일 생성 또는 수정을 할 시 살펴보아야 할 점은 `create_file` 과 `inject_into_file` 이외에도 다른 많은 옵션이 있다는 점이다. 아마 다른 템플릿에 관한 글을 보았다면 `copy_file`이나 `template` 또한 존재함을 알고 있을 것이다. 이 글에서는 해당 내용도 추가하면 너무 복잡해져서 추가하지 않았다. 좀 더 어려운 템플릿을 작성하기를 원한다면 템플릿 문서나 소스코드를 참고하는 것이 좋다.*
 
-## The Result: The Final Template in Rails
-The final template should look like this:
+## 레일즈 템플릿 결과물
+언급한 템플릿 작성 방식을 모두 사용한다면 아래와 같은 코드를 작성했을 것이다.
 
 ```rb
 # Install dotenv
@@ -174,33 +173,27 @@ if yes?('Would you like to install Rspec?')
 end
 ```
 
-You can test this particular template by running:
+위 템플릿을 아래 커멘드로 테스트 할 수 있다.
 
 ```zsh
 rails new myapp -m mytemplate.rb
 ```
 
-Or:
+또는
 
 ```zsh
 rails new myapp --database=postgresql mytemplate.rb
 ```
 
-To take advantage of the custom database configuration.
+앞서 언급했듯이 지금까지 작성한 파일은 Github gist에 공유되어 있다. 당신의 필요에 맞게끔 수정 및 업로드 하여 다른 팀 동료나 친구 또는 커스텀 템플릿을 필요로 하는 사람들에게 공유해도 좋다.
 
-As mentioned, this file is perfectly suited to share as a GitHub gist. Adapt it to suit your needs, upload it, and then share it with your colleagues, friends, and anyone else interested in your custom app template 😉.
+## Rails 제네레이터와 템플릿에 대해 좀 더 알고 싶다면...
+말할 필요도 없이 우리가 지금까지 했던 과정은 그저 기초에 불과하다.
 
-## Learn More About Rails Generators and Templates
-Needless to say, we've just scratched the surface here.
+각자 제각각의 취향에 맞춘 제네레이터와 어플리케이션 템플릿이 여기저기 공유되어 있다. 필요에 따라 어떻게 구현했는지 각 제네레이터와 템플릿을 읽으며 습득하면 된다. 특히 [Chris Oliver's Jumpstart](https://github.com/excid3/jumpstart) 와 [RailsBytes](https://railsbytes.com/)를 추천한다. 후자는 템플릿을 공유한 커뮤니티이다.
 
-Everyone has different preferences for writing and developing Rails apps, so there are numerous generators and application templates out there. You can learn a lot about doing specific customizations by reading about them. I recommend [Chris Oliver's Jumpstart](https://github.com/excid3/jumpstart) and [RailsBytes](https://railsbytes.com/), the latter of which is a community-curated collection of templates.
+또한 [Thoughtbot's Suspenders](https://github.com/thoughtbot/suspenders) 추천하는데 이는 레일즈 제네레이터와 템플릿에 관해 좀 더 깊이 파고들게 하는 원동력이 되었다. 필자(여기서는 원작자) 또한 [Schienenzeppelin](https://github.com/hschne/schienenzeppelin)이라는 템플릿을 작성하였다. 이 템플릿은 더이상 최신은 아니지만 그래도 통찰 정도는 줄 수 있지 않을까 생각한다.
 
-There is also [Thoughtbot's Suspenders](https://github.com/thoughtbot/suspenders), which inspired me to dig deeper into Rails generators and templates. I even wrote my own application template — [Schienenzeppelin](https://github.com/hschne/schienenzeppelin) — which, while not up-to-date, might still provide some inspiration.
-
-## Wrap Up: Get Started with Ruby on Rails Generators and Templates
-In this post, we looked into the basics of Rails generators and how they are used. We created our own generators to simplify writing new model specs.
-
-We then delved into templates and learned how you could create a simple template to customize your application setup. This can be a bit of work, but also quite rewarding. If writing your own templates is not for you, there are many existing ones online to choose from!
 
 Original Source:
 [Bootstrapping with Ruby on Rails Generators and Templates](https://blog.appsignal.com/2022/05/04/bootstrapping-with-ruby-on-rails-generators-and-templates.html)
