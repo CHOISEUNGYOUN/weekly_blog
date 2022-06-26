@@ -19,6 +19,7 @@
 
 # GraphQL
 * [There and Back Again, A GraphQL Lifecycle Tale](graphql/graphql-for-busy-people.md)
+* [Understanding the GraphQL AST](graphql/understanding-the-graphql-ast.md)
 
 # SQL
 * [SQL Antipatterns Chapter2](sql/SQL-Antipatterns-2.md)
