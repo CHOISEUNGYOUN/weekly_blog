@@ -124,25 +124,19 @@ export const RugbyPlayers : gql.GraphQLFieldConfig<any, any> = {
 
 추상 구문 트리의 구조는 GraphQL의 중첩 객체로 이루어진 요청을 다루는데 최적화 되어있다. 위에서 언급된 추상 구문 트리는 루트의 `full_name` 필드와 중첩된 `club` 필드를 깔끔하게 구분하고 있다. `selectionSet`을 통해 `club` 또한 사용자가 요청한 속성이라는 사실을 알 수 있다. graphql-tools 과 같은 툴들은 이런 selection sets 검색 및 추상 구문 트리를 다루는데 용이하다.
 
-## So why is all this important?
-When I first starting implementing a GraphQL backend, my thoughts were not “I can’t wait until I can dive into that confusing GraphQL AST that I keep seeing scattered throughout my resolvers”.
+## 그럼 앞서 언급한 내용들이 왜 중요할까?
+처음 GraphQL 백엔드를 구축하기 시작했을땐 GraphQL의 복잡한 추상 구문 트리를 이해하여 구현된 리졸버에 파편화 된 요소들을 바로 잡을 수 있을 것이라고 생각했다. 이내 잘못된 생각을 하고 있었다고 깨닫게 되었다. 대신 커스텀 지시문을 만들어서 사용자 요청을 최적화 시켜야 한다는 생각이 들었다. 전통적인 GraphQL 라이프사이클을 파헤친 뒤 요청 중간에 내가 원하는 지시문을 추가하는데 매우 유용했다. 특히 아래와 같은 작업들을 추상 구문 트리에 적용할 수 있었다.
 
-No.
+* Schema stitching(여러 개의 GraphiQL 모델을 하나로 통합하는 기법)
+* Custom directives(커스텀 지시어, 스키마에 @deprecated 지시어를 넣는것 처럼 직접 커스텀으로 지시어를 추가할 수 있음.)
+* Enriched queries(쿼리 형태를 다양하게 사용할 수 있음을 의미하는 듯.)
+* Layered Abstraction(스키마는 추상 구문 트리를 제외한 실제 필요한 타입과 리졸버만 보여준다/)
+* 이외에도 여러가지 마법같은 방법들이 있다!
 
-Instead it arose out of need to craft custom directives and optimise user requests. It has been very useful to break the traditional GraphQL lifecycle and intercept a request before it gets passed onto another library to generate a data response. Specifically, by traversing and augmenting the AST we can implement:
+## 커스텀 지시어
+프론트엔드 클라이언트에서 API를 좀 더 유연하게 사용하기 위해 추상 구문 트리에 지정된 필드를 변환하거나 필터링 할 수 있는 다양한 지시어를 사용할 수 있다.
 
-* Schema stitching
-* Custom directives
-* Enriched queries
-* Layered Abstraction
-* More backend magic!
-
-## Custom Directives
-In a step to give more control to the front-end client, we often find it useful to implement a range of directives that can transform or filter out fields specified in the AST.
-
-It is often very common that rugby commentators mis-pronounce the players name. To help our faithful commentators, we have decided to implement a rugby player **directive** to help with pronunciations.
-
-To achieve the above, we can create a `@pronounce` directive that will give us the phonetic spelling of players names.
+예를 들어 럭비 평론가들은 선수들 이름을 잘못 발음하기 일쑤이다. 이런 평론가들의 실수를 줄여주기 위해 럭비선수 타입에 발음표기를 커스텀 지시어로 추가 할 수 있다. 이를 위해 `@pronounce`라는 지시어를 만들어 각 선수들의 발음 표기를 제공 해 줄 수 있다.
 
 ```js
 export default new gql.GraphQLDirective({
@@ -164,11 +158,9 @@ const root = new GraphQLSchema({
 })
 ```
 
+추상 구문 트리 내 `full_name` 선택자에 선수에 대한 발음을 지시어로 간단히 추가함으로써 럭비 선수들의 이름을 어떻게 말하는지 알수 있게 되었다.
 
-A simple implementation of a magic service can then help us ‘translate’ these players names by diving into the `directives` array on the `full_name` selection in the generated AST.
-
-
-Our resolve function now dives into the AST to find which fields are tagged with the `@pronounce` directive and translates the fields accordingly.
+리졸버 함수는 이제 추상 구문 트리 내 어떤 필드에 `@pronounce` 지시어가 포함되어있는지 찾아 그에 맞게 변환시켜준다.
 
 ```js
 // For demonstration purpose, we are only diving 1 level deep into AST
@@ -193,19 +185,17 @@ return rugbyPlayers.map(player => Object.keys(player).reduce((obj, field) => {
 }, {}))
 ```
 
-With a few lines of code we have solved the issue of dodgy name pronunciations.
+몇줄의 코드 추가만으로 선수들의 이름을 제대로 발음하지 못하는 문제를 해결 할 수 있다.
 
-## Caching
-What nightmares are made of.
+## 캐싱
+GraphQL에서 가장 어려운 부분이 캐싱이다. GraphQL 데이터 소스 내 많은 객체들은 그리 자주 변경되지 않는다. 사용자가 요청할 때마다 이에 상응하는 데이터를 가져오는 것은 꽤나 비효율적이다. 이는 사용자가 GraphQL 응답 필드를 지정하기 때문에 캐싱하기가 어렵고 매 사용자마다 고유의 응답을 내려주기 힘들기 때문이다.
 
-Many objects in a GraphQL data source do not change that often. It becomes quite expensive to fetch these items every time a user requests it and since users define the shape of a GraphQL response, it can be quite difficult to cache and return a custom response for each user.
+이에 대한 일반적인 해결책은 **문자열의 추상 구문 트리 선택자에 대한 결과 자체를 캐싱** 하는 것이다. 요청되는 필드와 중첩 필드들을 결합하게 되면 동일한 쿼리문을 요청하는 사용자를 구분 할 수 있는 키를 생성할 수 있게 된다. 이를 통해 데이터베이스에서 데이터를 다시 조회하거나 외부에서 데이터 소스를 가져오는 것이 아니라 결과값을 재사용 할 수 있게 된다.
 
-A common solution to this is caching a result against **a unique stringified version of the AST field selections**. By combining the requested fields and their nested fields, we can create a key that will match for all users with the same query document. This enables us to reuse a result instead of fetching from a database or external data source once again.
+## 결론
+추상 구문 트리가 어떻게 구성되고 리졸버에서 어떻게 사용되는지 이해하게 되면 GraphQL 백엔드에서 입력과 출력값을 세밀하게 조정할 수 있게 된다. 이를 통해 결과를 캐싱할수도 있고, 커스텀 지시어를 생성할 수도 있으며, 다양한 소스에서 가져온 데이터를 쿼리 최적화 및 변환을 할 수 있다.
 
-## Conclusion
-Understanding how the AST is structured and used within your resolvers allows you to gain a fine-grain control over the input and output of your GraphQL backend. It allows you to cache results, create custom directives, optimise queries & stitch together data from multiple resources.
-
-By understanding how the AST works in the GraphQL lifecycle, you can create complex backends and ultimately provide more power to the front end consumer.
+추상 구문 트리의 라이프사이클을 이해함으로써 좀 더 복합적인 백엔드를 구성하여 최종적으로 프론트엔드에게 좀 더 강력한 힘을 제공할 수 있다.
 
 Original Source:
 [Understanding the GraphQL AST](https://adamhannigan81.medium.com/understanding-the-graphql-ast-f7f7b8e62aa4)
