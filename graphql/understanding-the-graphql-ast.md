@@ -127,7 +127,7 @@ export const RugbyPlayers : gql.GraphQLFieldConfig<any, any> = {
 ## 그럼 앞서 언급한 내용들이 왜 중요할까?
 처음 GraphQL 백엔드를 구축하기 시작했을땐 GraphQL의 복잡한 추상 구문 트리를 이해하여 구현된 리졸버에 파편화 된 요소들을 바로 잡을 수 있을 것이라고 생각했다. 이내 잘못된 생각을 하고 있었다고 깨닫게 되었다. 대신 커스텀 지시문을 만들어서 사용자 요청을 최적화 시켜야 한다는 생각이 들었다. 전통적인 GraphQL 라이프사이클을 파헤친 뒤 요청 중간에 내가 원하는 지시문을 추가하는데 매우 유용했다. 특히 아래와 같은 작업들을 추상 구문 트리에 적용할 수 있었다.
 
-* Schema stitching(여러 개의 GraphiQL 모델을 하나로 통합하는 기법)
+* Schema stitching(여러 개의 GraphQL 모델을 하나로 통합하는 기법)
 * Custom directives(커스텀 지시어, 스키마에 @deprecated 지시어를 넣는것 처럼 직접 커스텀으로 지시어를 추가할 수 있음.)
 * Enriched queries(쿼리 형태를 다양하게 사용할 수 있음을 의미하는 듯.)
 * Layered Abstraction(스키마는 추상 구문 트리를 제외한 실제 필요한 타입과 리졸버만 보여준다/)
