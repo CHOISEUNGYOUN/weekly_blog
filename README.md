@@ -20,6 +20,7 @@
 # GraphQL
 * [There and Back Again, A GraphQL Lifecycle Tale](graphql/graphql-for-busy-people.md)
 * [Understanding the GraphQL AST](graphql/understanding-the-graphql-ast.md)
+* [Handling GraphQL errors like a champ with unions and interfaces](graphql/handling-graphql-errors-like-a-champ-with-unions-and-interfaces.md)
 
 # SQL
 * [SQL Antipatterns Chapter2](sql/SQL-Antipatterns-2.md)
