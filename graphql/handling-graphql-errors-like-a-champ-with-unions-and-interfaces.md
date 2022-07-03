@@ -1,25 +1,18 @@
-# Handling GraphQL errors like a champ with unions and interfaces
+# 유니온(union)과 인터페이스(interface) 를 사용하여 GraphQL 에러 핸들링하기
 
-Without a doubt, one of the best features of GraphQL is its awesome type system.
+의심할 여지 없이 GraphQL의 최고의 기능은 타입 시스템이다.
 
-Together with tools like the GraphQL Code Generator and typed Javascript subsets like TypeScript or Flow, you can generate fully typed data fetching code within seconds.
+GraphQL 코드 제네레이터와 타입스크립트나 플로우(Flow)와 같은 자바스크립트 서브셋을 함께 활용하면 타입이 지정된 데이터를 순식간에 가져올 수 있다.
 
-I cannot think back to the time where I had to design and build API’s without the GraphQL ecosystem.
+GraphQL을 사용한 이후로 GraphQL 없이 API를 개발하던 시절로 돌아갈 수 없을 지경이다. 그럼에도 불구하고 GraphQL을 처음 사용했을때 몇가지 문제점 때문에 다시 REST로 개발하고 싶은 순간들이 있었다. 그 중 하나는 바로 에러핸들링이 무척 불편하다는 점이다. 전통적인 HTTP 통신 방식에서는 각기 다른 상태 코드와 에러 메세지를 전달해줬다(또는 성공 메세지라던지).
 
-When I started using GraphQL, I had some issues with changing the mindset I’d developed by thinking in REST.
+GraphQL이 한창 인기를 얻고 있을때 아폴로 서버 터미널에서 에러 객체를 로깅할때 상태코드로 200과 함께 `ok` 라고 내려주던 밈(meme)이 유행했던 적이 있었다. 왜 GraphQL이 광범위하게 쓰이고 있던 규격을 깨고 있는지 궁금했었다. 좀 더 조사해본 뒤 GraphQL이 어떻게 에러를 좀 더 편하고 직관적인 방법으로 다룰 수 있는지 알게 되었다.
 
-One thing I’ve been particularly displeased about is error handling. In traditional HTTP, you have different Status Codes that represent different types of errors (or successes).
+## GraphQL에서 에러 핸들링 하기
 
-When GraphQL was gaining popularity, I remember a meme made of some terminal that showed an Apollo server logging an error object with status code 200 and the caption `ok`. I was wondering why GraphQL breaks these widely-used standards.
+API 디자인을 어떻게 했는지 살펴보기 전에 에러 핸들링을 여기까지 하게 된 과정에 대해서 하나씩 살펴보고자 한다. 예시코드는 `react-apollo` 와 `apollo-server` 를 사용하여 구성하고자 한다. 이 두 툴을 사용하지 않더라도 GraphQL을 사용하는 어떤 클라이언트 및 서버 프레임워크에 적용 가능하니 참고하자.
 
-Today, I know that GraphQL gives us the power to handle errors in a better and more explicit way.
-
-## Handling errors in GraphQL
-Before we take a look at how I design my APIs today, I wanna showcase the evolution of how I was handling errors until recently.
-
-I’ll use `react-apollo` and `apollo-server` code examples throughout this article. However, the concepts should be applicable to any other client and server framework.
-
-Let’s start with a look at the following JSON object:
+우선 아래의 JSON 객체를 살펴보도록 하자.
 
 ```json
 {
@@ -51,13 +44,9 @@ Let’s start with a look at the following JSON object:
   }
 }
 ```
-Does this seem familiar?
+어디서 한번 본것 같지 않은가? 위 코드는 [GraphQL Spec Error Section](https://spec.graphql.org/draft/#example-90475)에서 가져왔다. 이미 GraphQL API를 어플리케이션에 적용했다면 이러한 응답 포멧에 익숙할 것이다.
 
-This exact code is copied from the [GraphQL Spec Error Section](https://spec.graphql.org/draft/#example-90475). If you’ve already integrated a GraphQL API into your application, you may be familiar with this response format.
-
-By design, GraphQL has the capabilities to declare fields nullable. Despite this data being optional, it also allows us to send partial results if a resolver throws an error.
-
-This is one thing that differentiates GraphQL from strict REST.
+GraphQL은 설계상 필드 값을 nullable 처리를 할 수 있다. 해당 데이터가 선택값으로 지정되었더라도 리졸버에서 에러 메세지를 반환한다면 부분적으로 결과값을 전달 할 수 있다. 이는 엄격한 REST 구조와 다른 요소중에 하나이다.
 
 If a resolver throws an error — in this case, the name resolver for the hero with the id 1002 — a new array with the key errors is appended to the response JSON object.
 
@@ -583,3 +572,7 @@ const RegistrationForm: React.FC<{}> = () => {
 ```
 
 At a later point in time when your team decides that a new error should be handled different from the others, you can adjust the code by adding a new else/if statement in useEffect.
+
+
+Original Source:
+[Handling GraphQL errors like a champ with unions and interfaces](https://blog.logrocket.com/handling-graphql-errors-like-a-champ-with-unions-and-interfaces)
