@@ -46,13 +46,7 @@ API 디자인을 어떻게 했는지 살펴보기 전에 에러 핸들링을 여
 ```
 어디서 한번 본것 같지 않은가? 위 코드는 [GraphQL Spec Error Section](https://spec.graphql.org/draft/#example-90475)에서 가져왔다. 이미 GraphQL API를 어플리케이션에 적용했다면 이러한 응답 포멧에 익숙할 것이다.
 
-GraphQL은 설계상 필드 값을 nullable 처리를 할 수 있다. 해당 데이터가 선택값으로 지정되었더라도 리졸버에서 에러 메세지를 반환한다면 부분적으로 결과값을 전달 할 수 있다. 이는 엄격한 REST 구조와 다른 요소중에 하나이다.
-
-If a resolver throws an error — in this case, the name resolver for the hero with the id 1002 — a new array with the key errors is appended to the response JSON object.
-
-The array contains an error object with the original message of the error, a path, and a query location.
-
-The code for the resolver would look similar to this:
+GraphQL은 설계상 필드 값을 nullable 처리를 할 수 있다. 해당 데이터가 선택값으로 지정되었더라도 리졸버에서 에러 메세지를 반환한다면 부분적으로 결과값을 전달 할 수 있다. 이는 엄격한 REST 구조와 다른 요소중에 하나이다. `hero` 리졸버에서 에러를 반환하는 경우 (예시에서는 1002번 id) JSON 응답 객체에 key errors 배열을 추가하여 반환하게 된다. 이 배열은 어떤 에러인지에 대한 메세지를 담은 에러 객체와 경로, 쿼리 위치를 알려준다. 해당 리졸버 코드는 다음과 같다.
 
 ```js
 const resolvers = {
@@ -65,13 +59,7 @@ const resolvers = {
   },
 };
 ```
-I once thought this was pretty cool.
-
-Then I realized I needed more detailed info — something like a status code or an error code. How would I distinguish a “user does not exist” error from a “user has blocked you” error?
-
-The community learned, and the concept of extensions was added to the GraphQL spec.
-
-Extensions are nothing more than an additional object that can be added to your error object (or response object).
+처음 이 구조를 보았을때 좋다고 생각했었다. 하지만 이내 좀 더 상태 코드와 같이 자세한 정보가 필요하다는 것을 알게 되었다. 예를 들자면 이 에러를 보고 사용자가 존재하지 않는지(REST 에서는 404) 사용자가 차단을 했는지(REST 에서는 406으로 표현 가능) 구분이 불가능한 것이다. 그리하여 GraphQL에서는 아래와 같이 익스텐션을 추가할 수 있게 되었다. 익스텐션은 말 그대로 에러 객체(또는 응답 객체)에 객체를 추가하는 것을 의미한다.
 
 ```json
 {
@@ -89,11 +77,7 @@ Extensions are nothing more than an additional object that can be added to your 
 }
 ```
 
-With `extensions`, we can add a `code` property to our error object, which can then be used by the client (e.g. a `switch` or `if` statement).
-
-This is way more convenient than parsing the error message for interpreting the error.
-
-Frameworks like the Apollo Server provide Error classes that can be initialized with an error message and a code:
+익스텐션을 활용하면 에러 객체에 코드를 적절히 추가할 수 있어 이를 클라이언트에서 활용할 수 있다. 이는 에러메세지를 직접 구문분석 하는 것 보다 좀 더 간편한 방법이다. Apollo 서버와 같은 프레임워크들은 에러 클래스를 선언하여 에러메세지를 돌려 주기도 한다.
 
 ```js
 import {
@@ -112,28 +96,14 @@ const resolvers = {
 };
 ```
 
-Of course, I also started quickly adopting this style of error handling, but I soon realized that there are some drawbacks that reduce my productivity:
+필자 또한 위 방식과 같은 에러 핸들링 스타일을 빠르게 적용했지만 이 방법이 생산성 측면에서 장점보다는 단점이 많다는 점을 깨달았다.
 
-## The errors are not collocated to where they occur
+## 에러는 발생이 예상되는 위치에 발생하지 않는다.
 
-Of course, you have a path array that describes where an error occurs (e.g. `[ hero, heroFriends, 1, name ]`). You can build some custom function in your client that maps an error to your query path.
+물론 어디에 이 에러가 발생하는지 알 순 있다. 클라이언트에서 에러 메세지를 찾는 커스텀 함수를 만들어서 관리를 할 수도 있다. 필자는 개인적으로 모든 에러는 어플리케이션의 UI 단에서 다뤄져야 한다고 생각한다. 에러 자체가 기본적으로 발생하는 위치 이외의 곳에서 발생하게 되는것은 개발자의 에러를 유연하게 처리하고자 하는 의지를 떨어뜨리기 마련이다. 게다가 `Relay`와 같은 프레임워크들은 `Fragment`들을 컴포넌트에 주입하도록 장려하고 있다. 에러 핸들링을 적절하게 하기 위해선 정확한 에러를 각 컴포넌트에 주입시켜주는 커스텀 로직을 구현해야 한다. 이는 필자가 피하고자 했던 추가 작업이지만 어쩔수 없게 되었다.
 
-I personally believe that every error should be handled in the UI of the application.
-
-Having the error located somewhere different by default doesn’t really encourage developers to gracefully handle errors.
-
-Furthermore, frameworks like relay modern encourage you to only inject fragments into your components.
-
-For proper error handling, you need to apply custom logic for injecting the correct error into the correct component.
-
-Sounds like extra work that I personally would want to avoid.
-
-## Using the errors robs us of one of the main benefits of GraphQL: type safety
-As mentioned earlier, one of the main benefits of a GraphQL API is type safety.
-
-A schema is by default introspectable and exposes a complete register of all the available types and fields.
-
-Unfortunately, the error codes don’t follow any schema (at least not according to the GraphQL spec).
+## GraphQL의 에러 익스텐션을 활용하는 것은 GraphQL의 타입 안정성을 해치는 작업이다.
+앞서 말했듯이 GraphQL API의 가장 큰 장점 중 하나는 타입 안정성이다. 스키마는 기본적으로 자기 내부 검사 시스템을 통해 검증 될 수 있으며 모든 타입들과 필드들이 외부에 노출되어 있다. 하지만 에러 코드의 경우 스키마 내 어디에도 존재하지 않는다. (적어도 GraphQL 사양 내에서는 말이다.)
 
 No type error will be thrown if you mistype the error message or extension code inside your resolvers.
 
