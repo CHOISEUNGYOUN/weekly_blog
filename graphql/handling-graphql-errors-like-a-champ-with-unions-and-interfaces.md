@@ -247,10 +247,8 @@ const RegistrationForm: React.FC<{}> = () => {
 }
 ```
 
-## GraphQL gives you the power to shape your data tree according to your UI
-That’s why you should also shape your error types according to the UI.
-
-In case you have different types of errors, you can create a type for each of them and add them to your union list:
+## GraphQL을 사용하면 UI에 맞는 데이터 트리를 제공 할 수 있다.
+이것이 바로 UI에 맞는 에러 타입을 제공해야 하는 이유이다. 만약 다른 타입의 에러가 필요하다면 해당 에러에 맞는 타입을 새로 만들어서 유니온 리스트에 추가하면 된다.
 
 ```graphql
 type User {
@@ -289,17 +287,11 @@ type Mutation {
 }
 ```
 
-This allows each error type to have their unique properties.
+위와 같이 구성하면 각 프로퍼티마다 에러타입을 추가 할 수 있게 된다. 이제 프론트엔드 쪽으로 넘어가서 해당 스키마의 요구사항을 살펴보도록 하자.
 
-Let’s jump over the the frontend part of this requirement:
+> X 국가의 괴상한 규제 때문에 해당 국가에 거주하는 사용자에게 더이상 회원가입을 하지 못하도록 변경하는 API 요구사항이 추가되었다.
 
-> You have a new requirement for your API: people from country X should not be allowed to register anymore, due to some weird sanctions of the country your company operates from.
-
-Seems pretty straightforward, just add some new types on the backend, right?
-
-Unfortunately, no. The frontend developer will now also have to update his query because a new type of error, that is not covered by any selection set is now being returned.
-
-This means that the following query:
+겉보기엔 백엔드에 새로운 타입을 추가하기만 되는 것 처럼 보인다. 안타깝게도 이를 처리하려면 새롭게 추가된 에러 타입 때문에 프론트엔드 개발자또한 쿼리를 변경해야 한다.
 
 ```graphql
 mutation userRegister($input: UserRegisterInput!) {
@@ -320,7 +312,7 @@ mutation userRegister($input: UserRegisterInput!) {
   }
 }
 ```
-Needs to be updated to this:
+위와 같은 쿼리를 아래와 같이 변경해야 한다.
 
 ```graphql
 mutation userRegister($input: UserRegisterInput!) {
@@ -344,11 +336,9 @@ mutation userRegister($input: UserRegisterInput!) {
   }
 }
 ```
-Otherwise, the client will not receive an error message for the `CountryBlockedError` that can be displayed.
+이렇게 하지 않으면 클라이언트는 `CountryBlockedError` 에러를 받지 못하기 때문에(스키마에 존재하지 않음) 해당 에러를 표시하지 못한다.
 
-Forcing the developer of the client application to adjust their GraphQL documents every time we add some new error type does not seem like a clever solution.
-
-Let’s take a closer look at our error objects:
+개발자에게 새로운 에러타입을 추가 할 때마다 GraphQL 문서를 업데이트 하도록 강제하는 것은 그다지 현명한 선택이 아닌 것 처럼 느껴진다. 이제 우리가 새로 추가한 에러 객체를 한번 살펴보자.
 
 ```graphql
 type UserRegisterInvalidInputError {
@@ -362,19 +352,14 @@ type CountryBlockedError {
   message: String!
 }
 ```
-They both have one common property: `message`
-
-Furthermore, we might assume that every error that will be potentially added to a union in the future will also have a message property.
-
-Fortunately, GraphQL provides us with `interfaces`, that allow us to describe such an abstraction.
+새롭게 추가한 두 에러 타입 모두 공통적으로 `message`라는 속성(또는 필드) 가 추가된 것을 볼 수 있다. 게다가 우리는 유니온에 추가될 모든 에러들 또한 이 메세지 속성을 가질 것이라고 추측 할 수 있다. 다행히 GraphQL에서는 `interfaces`라는 것을 활용하여 추상화를 할 수 있도록 제공하고 있다.
 
 ```graphql
 interface Error {
   message: String!
 }
 ```
-
-An interface describes fields that can be implemented/shared by different types:
+인터페이스는 각 타입마다 공통적으로 사용되는 필드를 제공하고 있다.
 
 ```graphql
 interface Node {
@@ -397,9 +382,7 @@ type Query {
 }
 ```
 
-For queries, the power of interfaces lies in being able to declare a data selection trough an interface instead of a type.
-
-That means our previous schema can be transformed into the following:
+쿼리의 경우 인터페이스의 장점은 타입 대신 인터페이스를 통해 데이터 선택을 선언 할 수 있다는 점이다. 이는 곧 우리가 위에서 살펴보았던 스키마를 아래와 같이 변경가능하다는 것이다.
 
 ```graphql
 type User {
@@ -441,10 +424,7 @@ type Mutation {
   userRegister(input: UserRegisterInput!): UserRegisterResult!
 }
 ```
-
-Both error types now implement the Error interface.
-
-We can now adjust our query to the following:
+위와 같이 `UserRegisterInvalidInputError` 와 `CountryBlockedError` 모두 `Error` 인터페이스를 사용하여 적용 할 수 있다. 이제 아래와 같이 쿼리를 사용할 수 있게 되었다.
 
 ```graphql
 mutation userRegister($input: UserRegisterInput!) {
