@@ -447,14 +447,9 @@ mutation userRegister($input: UserRegisterInput!) {
   }
 }
 ```
+위와 같이 하면 `CountryBlockedError`을 선택 셋(set)에서 더이상 선언할 필요가 없어진다. `Error` 선택 셋에서 자동으로 커버된다. 추가로 `Error` 인터페이스로 상속받은 새로운 타입을 `UserRegisterResult` 유니온에 추가하게 되면 에러 메세지는 자동으로 해당 결과에 포함된다. 물론 클라이언트에서 해당 에러 상태를 핸들링 하기 위해서 로직 추가가 필요하지만 모든 에러를 `UserRegisterInvalidInputError` 와 같이 직관적으로 해결하는 것 대신 `CountryBlockedError`와 같이 특정 에러 다이얼로그만 표시하는 것도 가능하다.
 
-No need to even declare the `CountryBlockedError` selection set anymore. It is automatically covered by the Error selection set.
-
-Furthermore, if any new type that implements the `Error` interface is added to the `UserRegisterResult` union, the error message will be automatically included in the result.
-
-Of course, you will still have to add some logic on the client for handling your error state, but instead of explicitly handling every single error you can switch between the ones that need some more work, like `UserRegisterInvalidInputError`, and all these other errors that only show some sort of dialog, like `CountryBlockedError`.
-
-E.g. if you follow the convention of ending all your error type with the word `Error` , you can build an abstraction that will handle multiple error types.
+모든 에러 타입을 `Error` 로 끝나도록 컨벤션을 구성하는 경우 여러 에러 타입을 포함하는 추상 에러 인터페이스를 만들어도 된다.
 
 ```js
 import React, { useState } from "react";
@@ -504,8 +499,7 @@ const RegistrationForm: React.FC<{}> = () => {
 }
 ```
 
-At a later point in time when your team decides that a new error should be handled different from the others, you can adjust the code by adding a new else/if statement in useEffect.
-
+팀 내에서 새로운 에러 타입은 기존 에러들과 다르게 다루어져야 한다고 결정을 내린다면 간단하게 `useEffect`에 새로운 조건문을 추가하기만 하면 된다.
 
 Original Source:
 [Handling GraphQL errors like a champ with unions and interfaces](https://blog.logrocket.com/handling-graphql-errors-like-a-champ-with-unions-and-interfaces)
