@@ -39,10 +39,10 @@ EXPLAIN SELECT * FROM users ORDER BY username;
 
 예상했듯이 위 쿼리 계획에서는 순차 검색에 대한 실행 예상 비용이 `0.00`, 비용으로 `66.83`이 출력된다.
 
-## Total costs
-The second cost statistic, after the startup cost and the two dots, is known as the “total cost”. This is an estimate of how long it will take to return all the rows.
+## 총 비용
+시작 비용 뒤 두개의 온점(..) 에서 보이는 비용 통계의 두번째 항목은 총 비용(total cost) 이라 불린다. 이 항목은 모든 로우를 반환할 때 걸리는 시간을 예상한 값이다.
 
-Let’s look at that example query plan again:
+예시 쿼리 계획을 다시 한번 살펴보자.
 
 ```postgresql
 |QUERY PLAN                                                    |
@@ -52,13 +52,13 @@ Let’s look at that example query plan again:
 |  ->  Seq Scan on users  (cost=0.00..17.00 rows=1000 width=17)|
 ```
 
-We can see that the total cost of the `Seq Scan` operation is `17.00`. For the `Sort` operation is `69.33`, which is not much more than its startup cost (as expected).
+위 예시에서 볼 수 있듯이 `Seq Scan` 수행의 총 비용은 `17.00` 이다. `Sort` 수행의 경우 `69.33` 인데, 이는 시작 비용값과 비교하면 큰 차이(예상대로)가 나지 않는다.
 
-Total costs usually include the cost of the operations preceding them. For example, the total cost of the `Sort` operation above includes that of the `Seq Scan`.
+총 비용은 보통 선행 작업 비용이 포함되어있다. 예를 들어 위 `Sort` 작업의 총 비용에는 `Seq Scan` 비용이 포함되어 있다.
 
-An important exception is `LIMIT` clauses, which the planner uses to estimate whether it can abort early. If it only needs a small number of rows, the conditions for which are common, it may calculate that a simpler scan choice is cheaper (likely to be faster).
+여기서 중요한 예외 항목은 `LIMIT` 절인데, 예상 비용을 측정하는 실행 계획에서 먼저 실행을 중단 할 수 있기 때문이다. 작은 수의 로우만 반환하는 것이 일반적인 경우라면 검색 할 때 좀 더 비용이 덜 드는 쪽(더 빠르게 검색이 되는 경우)으로 계산 할 것이다.
 
-For example:
+예를 들자면 아래와 같다.
 
 ```postgresql
 EXPLAIN SELECT * FROM users LIMIT 1;
@@ -69,16 +69,16 @@ EXPLAIN SELECT * FROM users LIMIT 1;
 |  ->  Seq Scan on users  (cost=0.00..17.00 rows=1000 width=17)|
 ```
 
-As you can see, the total cost reported on the `Seq Scan` node is still `17.00`, but the full cost of the `Limit` operation is reported to be `0.02`. This is because the planner expects that it will only have to process 1 row out of 1000, so the cost, in this case, is estimated to be 1000th of the total.
+여기서 볼 수 있듯이 `Seq Scan` 으로 보고되는 총 비용은 여전히 `17.00` 이지만 `Limit` 수행을 통한 총 비용 계산은 `0.02` 가 된다. 이는 실행 계획서에서 1000개의 로우 중 오직 하나의 로우만 반환 할 것을 기대하기 때문에 `Seq Scan` 에서는 1000개의 로우의 검색 예상값을 계산하지만 총 비용 결과는 1개의 로우 반환 예상값만 계산하기 때문이다.
 
-## How the costs are calculated
-In order to calculate these costs, the Postgres query planner uses both constants (some of which we’ve already seen) and metadata about the contents of the database. The metadata is often referred to as “statistics”.
+## 비용은 어떻게 계산되는가
+비용을 계산하기 위해서 Postgres 쿼리 실행계획서는 상수와 데이터베이스 컨텐츠에 들어있는 메타데이터 모두 사용한다. 여기서 메타데이터는 보통 통계로 언급되기도 한다.
 
-Statistics are gathered via `ANALYZE` (not to be confused with the `EXPLAIN` parameter of the same name), and stored in `pg_statistic`. They are also refreshed automatically as part of autovacuum.
+통계는 `ANALYZE` 명령을 통해 수집되고(`EXPLAIN` 매개변수와 혼동되지 않아야 함.) `pg_statistic`에 저장된다. 이 데이터도 autovacuum의 일부로써 자동으로 갱신된다.
 
-These statistics include a number of very useful things, like roughly the number of rows each table has, and what the most common values in each column are.
+이 통계에서는 매우 유용한 지표들이 있는데 예를 들자면 테이블당 저장된 로우의 갯수 및 각 컬럼에 존재하는 가장 일반적인 값 등이다.
 
-Let’s look at a simple example, using the same query data as before:
+아래 예시에서 동일한 데이터를 가지고 실행한 쿼리 결과를 살펴보자.
 
 ```postgresql
 EXPLAIN SELECT count(*) FROM users;
@@ -89,9 +89,9 @@ EXPLAIN SELECT count(*) FROM users;
 |  ->  Seq Scan on users  (cost=0.00..17.00 rows=1000 width=0)|
 ```
 
-In our case, the planner’s statistics suggested the data for the table was stored within 7 pages (or blocks), and that 1000 rows would be returned. The cost parameters `seq_page_cost`, `cpu_tuple_cost`, and `cpu_operator_cost` were left at their defaults of `1`, `0.01`, and `0.0025` respectively.
+여기서 실행계획서 통계에 따르면 테이블의 데이터는 7페이지(또는 블록) 내에 적재되어 있으며 1000 로우가 반환 될 것이라고 제시하고 있다. `seq_page_cost`, `cpu_tuple_cost`, `cpu_operator_cost` 와 같은 비용 매개변수들은 `1`, `0.01`, `0.0025` 로 나타나고 있다.
 
-As such, the Seq Scan total cost was calculated as:
+이와 같이 순차 검색 총 비용은 아래와 같이 계산된다.
 
 ```postgresql
 |Total cost of Seq Scan
@@ -101,7 +101,7 @@ As such, the Seq Scan total cost was calculated as:
 |= 17.00
 ```
 
-And for the Aggregate as:
+이를 통합하면 다음과 같다.
 
 ```postgresql
 |Total cost of Aggregate
@@ -111,16 +111,16 @@ And for the Aggregate as:
 |= 19.51
 ```
 
-## How the planner uses the costs
-Since we know Postgres will pick the query plan with the lowest total cost, we can use that to try to understand the choices it has made. For example, if a query is not using an index that you expect it to, you can use settings like `enable_seqscan` to massively discourage certain query plan choices. By this point, you shouldn’t be surprised to hear that settings like this work by increasing the costs!
-Row numbers are an extremely important part of cost estimation. They are used to calculate estimates for different join orders, join algorithms, scan types, and more. Row cost estimates that are out by a lot can lead to cost estimation being out by a lot, which can ultimately result in a suboptimal plan choice being made.
+## 쿼리 실행계획서는 어떻게 비용을 이용하는가
 
-## Using EXPLAIN ANALYZE to get a query plan
-When you write SQL statements in PostgreSQL, the `ANALYZE` command is key to optimizing queries, making them faster and more efficient. In addition to displaying the query plan and PostgreSQL estimates, the `EXPLAIN ANALYZE` option performs the query (be careful with `UPDATE` and `DELETE`!), and shows the actual execution time and row count number for each step in the execution process. This is necessary for monitoring SQL performance.
+Postgres는 항상 가장 낮은 총 비용을 가진 쿼리 실행 계획을 선택하는데 이를 활용하여 실행계획이 어떻게 가장 낮은 비용을 산출하는지 알 수 있다. 예를 들어 쿼리가 예상한 인덱스를 사용하지 않는다면, 다른 기타 쿼리 계획들이 사용하지 않는 `enable_seqscan`와 같은 세팅을 선택할 수 있다. 여기서 이와 같은 선택을 하게되면 비용이 올라가게 된다. 로우의 갯수는 비용 측정에 매우 중요한 역할을 한다. 이 갯수들을 이용하여 다른 병합 순서, 병합 알고리즘, 검색 유형 등을 선정하여 계산하기 때문이다. 로트에서 벗어난 로우 비용 추정은 로트에서 벗어나는 비용 추정으로 이어지게되며 이는 곧 차선책을 선택하게 되는 결과를 초래하게 된다.
 
-You can use `EXPLAIN ANALYZE` to compare the estimated number of rows with the actual rows returned by each operation.
+## EXPLAIN ANALYZE을 사용하여 쿼리 실행 계획 가져오기
+PostgreSQL 에서 SQL문을 작성하는 경우 `ANALYZE` 명령어를 사용하는 것이 쿼리 최적화의 핵심이다. `EXPLAIN ANALYZE` 옵션을 사용하여 실행하면 실행 계획을 보여주고 PostgreSQL의 예상치에 덧붙여서 실제 수행 시간과 각 실행 단계별 조회하는 로우의 갯수를 보여준다. 이는 SQL 성능을 모니터링 하는데 필수 요건이다.
 
-Let’s look at an example, using the same data again:
+`EXPLAIN ANALYZE`를 사용하여 각 실행단계 별 예상되는 로우의 갯수와 실제 반환하는 로우의 갯수를 비교할 수 있다.
+
+아래 예시를 한번 살펴보자.
 
 ```postgresql
 |QUERY PLAN
@@ -133,10 +133,10 @@ Let’s look at an example, using the same data again:
 |Execution Time: 20.793 ms
 ```
 
-We can see that the total execution cost is still 69.33, with the majority of that being the Sort operation, and 17.00 coming from the Sequential Scan. Note that the query execution time is just under 21ms.
+여기서 우리는 총 실행 비용이 여전히 `69.33`이고 순차 검색으로 `17.00`이 든다고 나와있다. 여기서 실행 시간이 단지 21ms 가 걸린다는 것도 알 수 있다.
 
-### Sequential scan vs. Index Scan
-Now, let’s add an index to try to avoid that costly sort of the entire table:
+### 순차 검색 vs 인덱스 검색
+이제 인덱스를 추가하여 테이블 전체를 정렬하는 비효율적인 동작을 피해보자.
 
 ```postgresql
 |​​CREATE INDEX people_username_idx ON users (username);
@@ -150,26 +150,26 @@ Now, let’s add an index to try to avoid that costly sort of the entire table:
 |Execution Time: 1.686 ms
 ```
 
-As you can see, the query planner has now chosen an Index Scan, since the total cost of that plan is 28.27 (lower than 69.33). It looks that the index scan was more efficient than the sequential scan, as the query execution time is now just under 2ms.
+여기서 확인 할 수 있듯이 쿼리 실행 계획서는 이제 인덱스 검색을 사용하여 총 비용이 `28.27`로 줄어든 것을 확인 할 수 있다. 이전에 순차 검색으로 수행하는 경우 `69.33`이 드는데 이보다 적게 든다. 이를 바탕으로 보면 인덱스 검색이 순차 검색보다 훨씬 효율적인 것으로 보이는데, 이는 쿼리 수행시간이 2ms 이하로 표시됨으로써 이해 할 수 있다.
 
-## Helping the planner estimate more accurately
-We can help the planner estimate more accurately in two ways:
+## 실행계획 추정을 좀 더 정확하게 추정할 수 있도록 지원하기
+우리는 실행계획 추정을 좀 더 정확하게 할 수 있도록 두가지 방법을 사용 할 수 있다.
 
-1. Help it gather better statistics
-2. Tune the constants it uses for the calculations
+1. 더 나은 통계 수집을 돕기
+2. 계산에 사용하는 상수 조정
 
-The statistics can be especially bad after a big change to the data in a table. As such, when loading a lot of data into a table, you can help Postgres out by running a manual `ANALYZE` on it. Statistics also do not persist over a major version upgrade, so that’s another important time to do this.
+해당 통계는 테이블 내 데이터가 크게 변경되는 경우 부정확해진다. 예를 들어 많은 양의 데이터를 불러오는 경우 수동으로 `ANALYZE`을 실행하여 도울수 있다. 통계는 또한 메이저 버전이 바뀌면(예: PostgreSQL 10 -> 11로 업데이트) 통계자체가 변경되기 때문에 버전별로 상이함을 인지해야한다.
 
-Naturally, tables also change over time, so tuning the autovacuum settings to make sure it runs frequently enough for your workload can be very helpful.
+또한 테이블도 시간이 지남에 따라 변경되기 때문에 autovacuum 설정을 조정하여 워크로드에 대해 충분히 자주 실행하는것이 도움이 될 수 있다. 
 
-If you’re having trouble with bad estimates for a column with a skewed distribution, you may benefit from increasing the amount of information Postgres gathers by using the `ALTER TABLE SET STATISTICS` command, or even the `default_statistics_target` for the whole database.
+편향된 분포가 있는 컬럼에 대한 잘못된 추정으로 문제가 있는 경우 `ALTER TABLE SET STATISTICS` 명령어나 `default_statistics_target`을 전체 데이터베이스 대상으로 사용하여 Postgres가 수집하는 정보의 양을 늘리는것이 좋다.
 
-Another common cause of bad estimates is that, by default, Postgres will assume that two columns are independent. You can fix this by asking it to gather correlation data on two columns from the same table via extended statistics.
+잘못된 추정의 흔한 또 다른 이유는 기본적으로 Postgres 자체가 두 컬럼을 독립적이라고 추정하기 때문이다. 이 문제는 확장 통계를 사용하여 같은 테이블의 두 컬럼에서 연관된 데이터를 가져와서 질의함으로써 고칠 수 있다.
 
-On the constant tuning front, there are a lot of parameters you can tune to suit your hardware. Assuming you’re running on SSDs, you’ll likely at minimum want to tune your setting of `random_page_cost`. This defaults to 4, which is 4x more expensive than the `seq_page_cost` we looked at earlier. This ratio made sense on spinning disks, but on SSDs it tends to penalize random I/O too much. As such a setting closer to 1, or between 1 and 2, might make more sense. At ScaleGrid, we default to 1.
+상수 튜닝의 경우에는 사용하고 있는 하드웨어에 맞춰 튜닝 할 수 있는 많은 매개변수들이 있다. SSD를 사용하여 데이터베이스를 운영한다고 가정한다면 최소한 `random_page_cost` 설정을 조정하고 싶을 것이다. 기본값으로 4로 설정되어있는데 이는 이전에 살펴본 `seq_page_cost` 보다 더 비싸다. 이 비율은 HDD를 사용하는 경우 적잘할지 몰라도 SSD의 경우 랜덤 I/O에 너무 많은 악영향을 준다. 이 설정을 1로 줄이거나 1 또는 2 사이로 설정한다면 좀 더 괜찮을 것이다.
 
-## Can I remove the costs from query plans?
-For many of the reasons mentioned above, most people leave the costs on when running EXPLAIN. However, should you wish, you can turn them off using the COSTS parameter.
+## 비용을 쿼리 실행계획에서 삭제 할 수 있나요?
+위에서 많이 언급했듯이 대부분의 사용자들은 `EXPLAIN` 명령어에서 비용을 남기려고 할 것이다. 그럼에도 불구하고 보여지지 않게 세팅을 하고 싶다면 아래와 같이 끌 수 있다.
 
 ```postgresql
 EXPLAIN (COSTS OFF) SELECT * FROM users LIMIT 1;
@@ -180,12 +180,10 @@ EXPLAIN (COSTS OFF) SELECT * FROM users LIMIT 1;
 |  ->  Seq Scan on users|
 ```
 
-## Conclusion
-To re-cap, the costs in query plans are Postgres’ estimates for how long an SQL query will take, in an arbitrary unit.
-
-It picks the plan with the lowest overall cost, based on some configurable constants and some statistics it has gathered.
-
-Helping it estimate these costs more accurately is very important to help it make good choices, and keep your queries performant.
+## 결론
+요약하자면 쿼리 실행계획의 비용은 SQL 쿼리에 걸리는 시간에 대한 Postgres의 추정치이며 임의의 단위이다.
+PostgreSQL은 몇가지 설정가능한 상수들과 수집된 통계를 바탕으로 항상 가장 낮은 비용의 실행 계획을 선택한다.
+예상 비용을 좀 더 정확하게 계산할 수 있도록 수정하는 것이 좋은 선택을 하는 가장 중요한 포인트이자 효율적인 쿼리 수행을 할 수 있도록 돕는 것이다.
 
 Original Source:
 [Understanding the Postgres EXPLAIN cost](https://scalegrid.io/blog/postgres-explain-cost/)
