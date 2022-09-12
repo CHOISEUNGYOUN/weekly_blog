@@ -1,30 +1,28 @@
-# Monitoring PostgreSQL VACUUM processes
+# PostgreSQL VACUUM 프로세스 모니터링하기
 
-Vacuuming is a necessary aspect of maintaining a healthy and efficient PostgreSQL database. If you have [autovacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html#AUTOVACUUM) configured, you usually don’t need to think about how and when to execute PostgreSQL VACUUMs at all—the whole process is automatically handled by the database. However, if you are constantly updating or deleting data, vacuuming schedules may not be able to keep up with the pace of those changes. Even worse, vacuum processes may not be running at all, which can lead to a number of side effects that negatively impact database performance and resource usage. Monitoring a few key PostgreSQL metrics and events will help you ensure that vacuum processes are proceeding as expected.
+베큐밍(Vacuuming)은 건강하고 효율적으로 PostgreSQL 데이터베이스를 관리를 하기위해서는 반드시 필요한 요소이다. [autovacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html#AUTOVACUUM)이 설정되어 있다면 데이터베이스 자체적으로 vacuum이 관리되고 있기 때문에 언제 어떻게 동작시켜야 할 지 특별히 고민할 필요가 없다. 하지만 데이터가 계속 업데이트 되거나 삭제된다면 vacuum 스케쥴 자체가 해당 변화에 맞추어 대응이 되지 않는다. 최악인 경우에는 vacuum 프로세스 자체가 제대로 동작하지 않아 데이터베이스 퍼포먼스와 자원 관리에 치명적인 영향을 미치는 사이드 이펙트들이 발생한다. 몇 가지 주요 PostgreSQL 메트릭 및 이벤트를 모니터링하면 vacuum 프로세스가 예상대로 진행되고 있는지 확인하는 데 도움이 된다.
 
-This article will provide some background on why vacuuming is important in PostgreSQL, and explore a few ways to investigate and resolve issues that prevent VACUUMs from running efficiently.
+이 글은 PostgreSQL의 vacuum 프로세스가 왜 중요한지에 대한 몇가지 이유와 해당 VACUUM 프로세스로 인해 성능이 저해되는 몇가지 문제들을 파악하고 해결하는 방법을 알아보고자 한다.
 
-## PostgreSQL vacuuming overview
-PostgreSQL uses multi-version concurrency control (MVCC) to ensure that data remains consistent and accessible in high-concurrency environments. Each transaction operates on its own snapshot of the database at the point in time it began, which means that outdated data cannot be deleted right away. Instead, it is marked as a dead row, which must be cleaned up through a routine process known as vacuuming. For more information about MVCC and vacuuming, read our [PostgreSQL monitoring guide](https://www.datadoghq.com/blog/postgresql-monitoring).
+## PostgreSQL vacuum에 대한 이해
+PostgreSQL은 다중 버전 동시성 제어(multi-version concurrency control, MVCC - 동시 접근을 허용하는 데이터베이스에서 동시성을 제어하기 위해 사용하는 방법)를 사용하여 데이터가 일관성 있게 유지되고 동시성이 높게 요구되는 환경에서도 접근 가능한지 보장을 해주고 있다. 각 트랜잭션은 시작된 시점의 데이터베이스에 대한 자체 스냅샷에서 작동하므로 오래된 데이터를 즉시 삭제할 수 없다. 대신 해당 스냅샷의 데이터에 dead row 라고 표식을 남기는데, 해당 데이터는 주기적으로 돌아가는 vacuum 프로세스에서 반드시 제거되어야 한다. MVCC와 vacuum에 대한 더 자세한 내용은 [PostgreSQL monitoring guide](https://www.datadoghq.com/blog/postgresql-monitoring)을 참고하기 바란다.
 
-Vacuuming helps optimize database performance and resource usage by:
+Vacuum은 데이터베이스 성능 및 아래 예시와 같은 상황에 대비해 리소스를 최적화 시켜준다.
 
-- marking dead rows as available to store new data, which helps prevent unnecessary disk usage, and also helps speed up sequential scans, which cannot skip over dead rows.
-updating a [visibility map](https://www.postgresql.org/docs/current/storage-vm.html), which keeps track of pages that don’t contain any outdated/deleted data. This helps speed up index-only scans (by making it apparent when you can serve the data directly from the index, without having to access the data from the heap).
+- 새로운 데이터를 저장하기 위해 dead rows에 마킹을 하여 불필요한 디스크 사용을 방지하며 순차검색 속도를 높여준다. 이는 순차검색이 dead rows를 생략하지 못하기 때문이다. [시각화 맵](https://www.postgresql.org/docs/current/storage-vm.html)을 업데이트하여 오래되거나 이미 삭제된 데이터가 포함되지 않도록 유지시켜준다. 또한 인덱스 검색 속도도 향상시켜준다.(힙에 존재하는 데이터에 접근하지 않고 인덱스에서 조회할때 마킹된 데이터를 정리해준다.)
 
-- [preventing transaction ID wraparound failure](https://www.postgresql.org/docs/current/routine-vacuuming.html#VACUUM-FOR-WRAPAROUND), which could lead to data loss, or bring the database to a halt by blocking any new transactions.
+- [트랜잭션 ID wraparound 실패](https://www.postgresql.org/docs/current/routine-vacuuming.html#VACUUM-FOR-WRAPAROUND)를 방지하는데, 이 문제는 데이터 유실 또는 새로운 트랜잭션 생성을 중단시키는 현상이 발생한다.
 
-PostgreSQL’s built-in autovacuuming feature provides another benefit over manual vacuuming: It periodically runs an ANALYZE process to gather the latest statistics about frequently updated tables, which enables the query planner to optimize its plans. Although autovacuuming is designed to periodically execute VACUUM commands across your databases in order to carry out the maintenance tasks listed above, you should still monitor a handful of key metrics and events to ensure that your VACUUM processes aren’t running into any hiccups along the way.
-
-## PostgreSQL VACUUM metrics to monitor
-In order to ensure that VACUUMs are running smoothly across your databases, you should monitor:
+PostgreSQL의 내장 autovacuum 기능에는 수동 vacuum 작업보다 유용한 또 다른 기능이 있는데, 이는 주기적으로 `ANALYZE` 프로세스를 실행하여 자주 업데이트 되는 테이블들의 최신 통계를 가져와서 해당 테이블들을 접근하는 쿼리들을 최적화 시켜주는 것이다. autovacuum 자체가 원래 주기적으로 데이터베이스 내 전체 테이블에 `VACUUM`을 실행하여 위에서 언급한 유지보수 기능을 담당하고 있지만 `VACUUM` 프로세스 자체가 잘 돌아가고 있는지 확인하기 위해서는 몇가지 주요한 메트릭과 이벤트들이 있기 때문에 모니터링 하기 위해서 반드시 알아두어야 한다.
+## 모니터링을 위한 PostgreSQL VACUUM 메트릭
+`VACUUM`이 잘 돌아가고 있는지 확인하기 위해서 아래와 같은 지표들을 모니터링 해야한다.
 
 - [dead rows](#dead-rows)
-- [table disk usage](#table-disk-usage)
-- [the last time a VACUUM or AUTOVACUUM ran](#last-time-autovacuum-ran)
-- manual/nightly VACUUM events
+- [테이블 디스크 사용량](#table-disk-usage)
+- [마지막으로 VACUUM 또는 AUTOVACUUM을 실시한 시각](#last-time-autovacuum-ran)
+- [수동/야간 VACUUM 이벤트](#correlating-vacuums-with-metrics)
 
-If you already know that VACUUMs are experiencing issues, skip straight down to the suggested solutions to find out why your VACUUMs may not be running.
+이미 `VACUUM` 관련하여 문제들을 겪고 있다면 바로 [`VACUUM` 이 돌지 않는 이유에 대한 해결책](#investigating-common-vacuum-related-issues) 섹션으로 넘어가서 해결책을 찾아보자.
 
 ## Dead rows
 PostgreSQL offers a `pg_stat_user_tables` view that provides a breakdown of each table (`relname`) and how many dead rows (`n_dead_tup`) are in that table:
