@@ -18,14 +18,14 @@ PostgreSQL의 내장 autovacuum 기능에는 수동 vacuum 작업보다 유용�
 `VACUUM`이 잘 돌아가고 있는지 확인하기 위해서 아래와 같은 지표들을 모니터링 해야한다.
 
 - [dead rows](#dead-rows)
-- [테이블 디스크 사용량](#table-disk-usage)
-- [마지막으로 VACUUM 또는 AUTOVACUUM을 실시한 시각](#last-time-autovacuum-ran)
-- [수동/야간 VACUUM 이벤트](#correlating-vacuums-with-metrics)
+- [테이블 디스크 사용량](#테이블-디스크-사용량)
+- [마지막으로 VACUUM 또는 AUTOVACUUM을 실시한 시각](#마지막으로-(auto)vacuum-을-수행한-시각)
+- [수동/야간 VACUUM 이벤트](#VACUUM과-메트릭-상관관계)
 
-이미 `VACUUM` 관련하여 문제들을 겪고 있다면 바로 [`VACUUM` 이 돌지 않는 이유에 대한 해결책](#investigating-common-vacuum-related-issues) 섹션으로 넘어가서 해결책을 찾아보자.
+이미 `VACUUM` 관련하여 문제들을 겪고 있다면 바로 [`VACUUM` 이 돌지 않는 이유에 대한 해결책](#VACUUM과-관련된-일반적인-문제-파악하기) 섹션으로 넘어가서 해결책을 찾아보자.
 
 ## Dead rows
-PostgreSQL offers a `pg_stat_user_tables` view that provides a breakdown of each table (`relname`) and how many dead rows (`n_dead_tup`) are in that table:
+PostgreSQL은 `pg_stat_user_tables` 라는 뷰 테이블을 제공해주고 있는데 이 뷰는 각 테이블(`relname`)과 해당 테이블에 얼마나 많은 죽은 로우(`n_dead_tup`)들이 발생했는지 현황을 보여준다.
 
 ```sql
 SELECT relname, n_dead_tup FROM pg_stat_user_tables;
@@ -34,17 +34,16 @@ SELECT relname, n_dead_tup FROM pg_stat_user_tables;
 -----------+------------
  blog_joke |    3780
  ```
-Tracking the number of dead rows in each table—particularly tables that are frequently updated—will help you determine if VACUUM processes are effectively removing them periodically so that their disk space can be reused.
+
+각 테이블, 특히 자주 업데이트 되는 테이블의 죽은 로우 갯수를 추적하게 되면 VACUUM 프로세스가 디스크 공간을 재사용 할 수 있도록 주기적으로 돌고 있는지 확인하는데 도움이 된다.
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-1.jpeg)
 
+## 테이블 디스크 사용량
+각 테이블에서 사용되고 있는 디스크 용량을 추적하는 것은 중요한데 이는 시간이 경과함에 따라 데이터 변경에 대한 쿼리 성능을 측정함으로써 VACUUM과 관련된 잠재적 문제를 확인하는데 유용하기 때문이다. 종종 디스크 사용량 증가는 사용자의 예상범위 내에서 이뤄져야 한다. 예를 들어 최근에 많은 양의 새로운 데이터를 테이블에 추가하게 되면 다른 테이블에 예상치 못한 디스크 증가가 일어날 수 있게 되는데 이는 해당 테이블의 VACUMM 프로세스에 문제가 발생했음을 예상 할 수 있다.
 
-PostgreSQL live rows in Datadog
-## Table disk usage
-Tracking the amount of disk space used by each table is important because it enables you to gauge expected changes in query performance over time—but it can also help you detect potential vacuuming-related issues. Sometimes increased disk usage may align with your expectations—for example, if you’ve recently added a lot of new data to that table. But if you see an unexpected increase in any particular table’s disk usage, it may indicate that there is a problem with vacuuming that table.
+Vacuuming은 사용되지 않는 로우들을 재사용할 수 있도록 표시를 남기는데 이는 곧 VACUUM이 주기적으로 동작하지 않으면 새로 추가되는 데이터는 죽은 로우를 제거함으로써 생긴 디스크 공간을 사용하는 것이 아니라 추가적으로 디스크 공간을 사용함을 의미한다.
 
-Vacuuming helps mark outdated rows as available for reuse, so if VACUUMs are not running regularly, then newly added data will use additional disk space, instead of reusing the disk space taken up by dead rows.
-
-The following query shows you the table that is using the most disk space in your database:
+아래 쿼리는 어떤 테이블이 가장 많은 디스크를 사용하고 있는지 보여주고 있다.
 ```sql
 SELECT
        relname AS "table_name",
@@ -63,18 +62,18 @@ DESC LIMIT 1;
 ```
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-2.jpeg)
 
-It may be helpful to graph the number of live rows, dead rows, and disk usage across each of the most constantly updated tables in your database, to see if the metrics align with your expectations.
+이를 통해 데이터베이스에서 가장 자주 업데이트가 일어나는 테이블의 살아있는 로우, 죽은 로우 및 디스크 사용량의 추이를 시각화해서 봄으로써 해당 메트릭이 예상한대로 흘러가는지 파악 할 수 있게 도와준다.
 
-For example, let’s say you have a table that currently has about 30,000 dead rows. You run a VACUUM process to mark the dead rows as available for future storage. Then, if you add new rows to the table, you shouldn’t see much (if any) increase in that table’s size (disk usage).
+예를 들어 최근에 3만개의 죽은 로우가 발생한 테이블이 있다고 가정하자. VACUUM 프로세스를 실행하여 죽은 로우의 용량을 차후에 사용할 수 있도록 표시를 남기면 새로운 로우를 테이블에 추가하더라도 테이블 크기(디스크 사용량) 자체에 큰 변화가 없음을 알 수 있을 것이다.
 
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-3.jpeg)
 
-Indeed, the graphs indicate that even though we inserted about 10,000 new rows into our table, the amount of disk being used by that table did not increase much, because the vacuuming process cleaned up about 30,000 dead rows and marked them as available for storage.
+위 그래프에서 볼 수 있듯이 1만개의 로우가 테이블에 추가되었지만 해당 테이블의 디스크 사용량은 얼마 늘지 않은 것을 알 수 있다. 이는 vaccum 프로세스가 3만개의 죽은 로우들을 청소하고 저장가능한 공간으로 표식을 남겼기 때문이다.
 
-If you see the size of any PostgreSQL tables increasing unexpectedly, VACUUM processes may not be executing properly on that table. To confirm if that’s the case, we can query the database to determine the last time each of our tables was vacuumed.
+만약 특정 테이블이 예상하지 못한 사용량 증가를 불러일으킨다면 VACUUM 프로세스가 제대로 동작하지 않았을 것이라고 추측할 수 있다. 이를 확인하기 위해 각 테이블의 마지막 vacuum 작업 시각을 질의해서 확인 해볼 수 있다.
 
-## Last time (auto)vacuum ran
-The built-in view pg_stat_user_tables enables you to find out the last time a vacuuming or autovacuuming process successfully ran on each of your tables:
+## 마지막으로 (auto)vacuum 을 수행한 시각
+내장 `pg_stat_user_tables` 뷰에서 마지막으로 vacuum 또는 autovacuum 프로세스를 성공적으로 동작한 시간을 확인할 수 있다.
 ```sql
 SELECT relname, last_vacuum, last_autovacuum FROM pg_stat_user_tables;
 
@@ -84,43 +83,45 @@ SELECT relname, last_vacuum, last_autovacuum FROM pg_stat_user_tables;
  blog_joke                           | 2018-01-23 18:03:28.498505-05 | 2018-01-18 14:56:43.060002-05
 ```
 
-## Correlating VACUUMs with metrics
-If certain tables in your database are constantly updated, you may find that it makes sense to supplement autovacuuming with manual VACUUM commands (or schedule them using something like `vacuumdb`) during low-traffic periods of time. As of version 9.6, PostgreSQL also includes VACUUM progress reporting via a view called `pg_stat_progress_vacuum`, which you can use to track the real-time status of your VACUUM commands.
+## VACUUM과 메트릭 상관관계
+데이터베이스 내 특정 테이블들이 지속적으로 업데이트 된다면 autovacuum에 추가적으로 수동 vacuum 커맨드를 실행하여 보충해주는 것이 합리적일 것이라고 판단할 것이다. (또는 `vacuumdb` 등과 같은 커맨드를 트래픽이 적은 시간에 스케쥴링하여 실행 할 수도 있다. Postgres 9.6부터 `pg_stat_progress_vacuum` 라는 뷰가 추가되었는데 이를 통해 현재 실행중인 vacuum 상태를 확인 할 수 있다.)
 
-If you track this command and its ensuing output in a monitoring platform, you can correlate it with other metrics across your PostgreSQL database and tweak your vacuuming schedule/frequency as needed. For example, you could track vacuuming activity by using the [Datadog Python library’s `dogwrap`](https://github.com/DataDog/datadogpy) utility to [wrap your psql VACUUM command](https://docs.datadoghq.com/developers/guide/dogwrap/):
+이 커맨드를 추적하고 모니터링 툴에서 결과를 보기를 원한다면 PostgreSQL 데이터베이스내 다른 메트릭과 상관관계를 지정하고 vacuum 스케쥴을 `/frequency` 에서 필요한 만큼 조절 가능하다. 예를 들면 [Datadog 파이썬 라이브러리인 `dogwrap`](https://github.com/DataDog/datadogpy)을 사용하여 [psql의 VACUUM 커맨드를 래핑하여](https://docs.datadoghq.com/developers/guide/dogwrap/) vacuum 활동을 추적 할 수 있다.
 
 ```sh
 dogwrap -n "Vacuuming my_table" -k $API_KEY --submit_mode all "psql -d <DATABASE> -c 'vacuum verbose my_table'"
 ```
-This sends the output of the VACUUM VERBOSE command to Datadog, which you can overlay on graphs that display key metrics from the vacuumed table.
+위 커맨드를 사용하면 `VACUUM VERBOSE`의 결과값을 Datadog에 전송하여 아래 이미지와 같이 vacuum되는 테이블의 키 메트릭을 그래프로 표현해준다.
 
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-4.jpeg)
 
-PostgreSQL VACUUM monitoring in DatadogAfter running a VACUUM process on a table (overlaid in purple on each graph), the number of dead rows in that table dropped to 0, but the table's disk usage (table size) remained the same.
-It looks like after we vacuumed this table, the number of dead rows dropped, but the size (disk usage) of the table did not decrease. This is expected behavior, because VACUUMs mark outdated rows as available for future data storage, but they rarely (except in [certain cases](https://www.postgresql.org/docs/current/routine-vacuuming.html)) return disk space to the system. If you actually need to return the disk space to your operating system, you’ll have to execute a [VACUUM FULL](https://www.postgresql.org/docs/current/routine-vacuuming.html)). However, this is typically an I/O-intensive process that requires an exclusive lock on the table, which can block queries and degrade performance. Because of the resource requirements of VACUUM FULL, PostgreSQL generally recommends regular autovacuuming as a better database maintenance option.
+위 그래프는 vacuum 이후의 테이블을 보여주는데 여기서 볼 수 있듯이 제거된 죽은 로우의 갯수를 보여주지만 테이블의 디스크 사이즈는 줄어들지 않음을 확인 할 수 있다. 이는 예상된 결과인데 왜나하면 `VACUUM`을 수행하면서 기록된 사용되지 않는 로우의 디스크 용량은 추후 데이터 저장이 필요한 경우 사용할 수 있지만 디스크 공간을 [특정 경우](https://www.postgresql.org/docs/current/routine-vacuuming.html)를 제외하곤 시스템에 돌려주지 않는다. 디스크 공간을 운영 시스템에 반환하기를 원한다면 [VACUUM FULL](https://www.postgresql.org/docs/current/routine-vacuuming.html) 커맨드를 실행해야 한다. 하지만 이 커맨드는 해당 테이블에 배타적 잠금이 필요한 높은 I/O를 수행하는 작업이다. `VACUUM FULL`의 이러한 리소스 요구조건 때문에 PostgreSQL에서는 보통 정기적 autovacuum을 더 나은 데이터베이스 유지보수 작업 선택지로 추천한다.
 
-## Investigating common VACUUM-related issues
-If metrics indicate that your VACUUMs are not running properly across your PostgreSQL tables, you can investigate the cause of the issue by querying a few settings and metrics across your database. In this section, we will assume that you are using PostgreSQL’s built-in autovacuuming feature, as recommended in the PostgreSQL documentation.
+## VACUUM과 관련된 일반적인 문제 파악하기
 
-There are a variety of possible reasons why autovacuuming processes could be stalling, or unable to run at all, including:
+메트릭에서 PostgreSQL 테이블 중에서 VACUUM이 제대로 수행되지 않는 테이블이 발견되면 몇가지 세팅값과 데이터베이스 메트릭을 참고하여 어떤 문제가 발생했는지 조사 해 볼 수 있다. 이번 섹션에서는 데이터베이스가 PostgreSQL 문서에서 권장하는 빌트인 autovacuum 기능을 사용한다고 가정하고 한번 알아보고자 한다.
 
-- [The autovacuum process is disabled on your database](#is-autovacuum-running)
-- [The autovacuum process is disabled on one or more tables](#autovacuum-may-be-disabled-on-certain-tables)
-- [Autovacuuming settings aren’t keeping pace with updates](#autovacuuming-settings-arent-keeping-pace-with-updates)
-- [Lock conflicts](#vacuums-are-running-into-lock-conflicts)
-- [Long-running open transactions](#long-running-open-transactions)
+해당 문제는 아래와 같은 몇가지 원인으로 인해 autovacuum 프로세스가 지연되거나 전혀 실행되지 않는다. 문제는 아래와 같다.
 
-### Is autovacuum running?
-If you expect autovacuuming to run regularly, but the time of the `last_autovacuum` ([queried above](#last-time-autovacuum-ran)) does not match your expectations, check that the autovacuum process is running:
+<!-- no toc -->
+- [데이터베이스에서 autovacuum 프로세스가 비활성화 되어 있는 경우](#autovacuum이-잘-수행되고-있는가?)
+- [특정 테이블에서만 autovacuum 프로세스가 비활성화 되어있는 경우](#특정-테이블에서만-autovacuum-프로세스가-비활성화-되어있는-경우)
+- [Autovacuum 설정이 업데이트 속도를 따라가지 못하는 경우](#Autovacuum-설정이-업데이트-속도를-따라가지-못하는-경우)
+- [잠금 충돌](#VACUUM-프로세스가-잠금-충돌되는-경우)
+- [오랫동안 수행중인 트랜잭션](#long-running-open-transactions)
+
+
+### autovacuum이 잘 수행되고 있는가?
+autovacuum이 주기적으로 잘 수행되고 있지만 `last_autovacuum` ([위 쿼리 참조](#마지막으로-(auto)vacuum-을-수행한-시각))이 예상과 다르게 나온다면 autovacuum 프로세스가 동작하고 있는지 아래 커맨드를 사용하여 확인 해볼 수 있다.
 
 ```sh
 ps -axww | grep autovacuum
 ```
 
-We have two possible paths we could investigate, depending on whether the process is actually running or not. Read [the next section](#autovacuum-process-is-not-running) if autovacuum is not running; otherwise, skip ahead to our other suggested solutions.
+여기서 autovacuum 프로세스가 동작하는지 여부에 따라 다음 두가지 조치를 취할 수 있다. Autovacuum 프로세스가 동작하지 않는다면 [Autovacuum 프로세스가 동작하지 않는 경우](#Autovacuum-프로세스가-동작하지-않는-경우) 를 참고하고 아니라면 아래 따로 언급할 섹션을 참고하자.
 
-### Autovacuum process is not running
-If it doesn’t look like autovacuum is running, we should verify that it’s actually been enabled in our PostgreSQL settings. By default, autovacuuming should already be turned on, but let’s double check:
+### Autovacuum 프로세스가 동작하지 않는 경우
+Autovacuum이 동작하지 않는 것 처럼 보인다면 PostgreSQL 세팅에서 autovacuum 플래그가 `on` 으로 되어있는지 확인해보아야 한다. 기본값으로 autovacuum은 이미 `on` 처리 되어있지만 검증 차원에서 한번 더 확인해보자.
 
 ```sql
 SELECT name, setting FROM pg_settings WHERE name='autovacuum';
@@ -130,9 +131,9 @@ SELECT name, setting FROM pg_settings WHERE name='autovacuum';
 (1 row)
 ```
 
-If it looks like autovacuuming has been enabled in your settings, but the process is not running on your server, it could be due to a problem with the [statistics collector](https://www.postgresql.org/docs/current/monitoring-stats.html). Autovacuuming relies on the statistics collector to determine when and how often it should run. By default, the statistics collector should already be enabled, but if it has been disabled, the statistics collector won’t able to provide the autovacuum daemon with information about real-time database activity.
+세팅값에서 autovacuum이 켜져 있지만 프로세스가 서버에서 동작하지 않는 경우 [statistics collector(통계 수집기)](https://www.postgresql.org/docs/current/monitoring-stats.html)의 문제일수도 있다. Autovacuum은 얼마나 자주 동작해야하는지 여부를 통계 수집기를 통해 의존한다. 기본적으로 통계 수집기는 이미 켜져 있어야하지만 만약 이게 꺼져 있다면 통계 수집기는 autovacuum 데몬 프로세스에 실시간 데이터베이스 활동에 관한 정보를 전달할 수 없다.
 
-You can check if the statistics collector is enabled by consulting the “Runtime Statistics” section of your **postgresql.conf** configuration file to see if track_counts is on, or by running the following query:
+통계 수집기가 켜져있는지 여부는 **postgresql.conf** 설정 파일의 "런타임 통계" 섹션에서 `track_counts` 가 켜져있는지 확인하거나 아래와 같이 질의해서 확인할 수 있다.
 
 ```sql
 SELECT name, setting FROM pg_settings WHERE name='track_counts';
@@ -143,14 +144,14 @@ SELECT name, setting FROM pg_settings WHERE name='track_counts';
 (1 row)
 ```
 
-If `track_counts` is off, the statistics collector won’t update the count of the number of dead rows for each table, which is the value that the autovacuum daemon checks in order to determine when and where it needs to run.
+`track_counts`가 꺼져있다면 통계 수집기는 각 테이블의 죽은 로우들의 갯수를 업데이트하지 않게 된다. 이는 autovacuum 데몬 프로세스가 해당 테이블에 autovacuum을 언제 돌릴것인지 판단하는 지표이기 때문에 당연히 동작하지 않게 된다.
 
-You can enable `autovacuuming` and `track_counts` by editing these settings in your PostgreSQL configuration file, [as described in the documentation](https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE).
+이 경우 [참고 링크](https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE)에 나와있는데로 PostgreSQL 설정 파일을 수정하여 `autovacuum`과 `track_counts`를 활성화 시킬 수 있다.
 
-### Autovacuum may be disabled on certain tables
-If it looks like the autovacuum process is running in your database, but it hasn’t launched on a table that received a lot of updates that should have triggered a VACUUM, it’s possible that autovacuuming was disabled at some point on the table(s) in question.
+### 특정 테이블에서만 autovacuum 프로세스가 비활성화 되어있는 경우
+데이터베이스에서 autovacuum 프로세스가 활성화 되어있는 것 처럼 보이지만 VACUUM이 실행되었어야 할 테이블에 프로세스가 동작하지 않았다면 autovacuum이 특정 설정으로 인해 특정 테이블에서만 수행되지 않았을 가능성이 높다.
 
-We can query `pg_class` to check if autovacuum is enabled on this table:
+이 경우 `pg_class`를 질의하여 해당 테이블에 autovacuum이 활성화 되어있는지 확인 할 수 있다.
 
 ```sql
 SELECT reloptions FROM pg_class WHERE relname='my_table';
@@ -159,22 +160,21 @@ SELECT reloptions FROM pg_class WHERE relname='my_table';
  {autovacuum_enabled=false}
 (1 row)
 ```
-In this example, it looks like autovacuuming is disabled on `my_table`. We can re-enable it by running:
+이 예시에서는 `my_table` 에만 autovacuum이 비활성화 되어있는 것으로 확인된다. 이 경우 아래 업데이트 쿼리를 실행하여 다시 활성화 시켜줘야한다.
 
 ```sql
 ALTER TABLE my_table SET (autovacuum_enabled = true);
 ```
 
-You can also view the `reloptions` for every table in your database by querying:
+또한 `reloptions` 질의를 모든 테이블에 실행하여 확인 할 수 있다.
 
 ```sql
 SELECT relname, reloptions FROM pg_class;
 ```
-Before proceeding with the other troubleshooting steps listed below, make sure that autovacuum has been enabled on all of your desired tables.
+다른 트러블슈팅 단계를 하기 전에 반드시 모든 테이블에 autovacuum이 활성화 되어있는지 확인을 해보아야한다.
 
-### Autovacuuming settings aren’t keeping pace with updates
-If autovacuuming is enabled everywhere throughout your database, but you believe that it is not triggering VACUUM processes on your tables frequently enough, you may want to tweak the default configuration settings. The autovacuum daemon relies on a number of configuration settings to determine when it should automatically run VACUUM and ANALYZE commands on your databases. You can view the current and default settings by querying `pg_settings`:
-
+### Autovacuum 설정이 업데이트 속도를 따라가지 못하는 경우
+데이터베이스 전체에 autovacuum 설정이 활성화 되어있어도 VACUUM 프로세스가 원하는 주기에 충분히 동작하지 않는 것처럼 보인다면 기본 설정을 변경하고 싶을 것이다. Autovacuum 데몬 프로세스는 VACUUM 과 ANALYZE 커맨드를 자동실행하기 위해 몇가지 환경 설정을 해줘야 한다. 이러한 설정들을 보고싶다면 `pg_settings`에 다음과 같이 질의하면 된다.
 ```sql
 SELECT * from pg_settings where category like 'Autovacuum';
 
@@ -193,24 +193,24 @@ SELECT * from pg_settings where category like 'Autovacuum';
  autovacuum_vacuum_threshold         | 50        |      | Autovacuum | Minimum number of tuple updates or deletes prior to vacuum.                               |            | sighup     | integer | default | 0       | 2147483647 |          | 50        | 50        |            |
 (11 rows)
 ```
-The `setting` column shows the currently configured value, while the `boot_val` column shows the default value for this setting (which is what PostgreSQL will use if you don’t specify otherwise). You can find the full descriptions of these settings [in the documentation](https://www.postgresql.org/docs/current/runtime-config-autovacuum.html).
+`setting` 컬럼은 현재 설정된 값을 보여주며 `boot_val` 컬럼은 해당 설정의 기본값을 보여준다.(PostgreSQL에 아무런 설정을 하지 않았다면 해당 값을 사용한다.) 해당 설정에 대한 모든 상세한 설명은 [여기 문서](https://www.postgresql.org/docs/current/runtime-config-autovacuum.html)에서 확인 할 수 있다.
 
-More specifically, let’s focus on the key factors that determine how frequently the autovacuum daemon will run a VACUUM command on any given table:
+위 설정을 좀 더 들여다 보면 autovacuum 데몬의 동작 주기를 결정하는 요소들을 확인 할 수 있다.
 
-- `autovacuum_vacuum_threshold` (50, by default)
-- `autovacuum_vacuum_scale_factor`: (0.2, by default)
-- the estimated number of rows in the table (based on [`pg_class.reltuples`](https://www.postgresql.org/docs/current/catalog-pg-class.html))
-The autovacuum daemon plugs these variables into a formula to determine the autovacuuming threshold (the number of dead rows that would automatically trigger a VACUUM process):
+- `autovacuum_vacuum_threshold` (50, 기본값)
+- `autovacuum_vacuum_scale_factor`: (0.2, 기본값)
+- 예상 로우 갯수([`pg_class.reltuples`](https://www.postgresql.org/docs/current/catalog-pg-class.html) 기반)
+Autovacuum 데몬은 해당 변수를 autovacuum 임계치에 지정하기 위해 공식에 반영한다.(VACUUM 프로세스를 자동으로 트리거 하는 죽은 로우 갯수를 모니터링 한다.)
 
 ```sql
 autovacuuming threshold = autovacuum_vacuum_threshold + (autovacuum_vacuum_scale_factor * estimated number of rows in the table)
 ```
 
-Adjusting these settings can help ensure that autovacuuming is running frequently enough to keep up with demand. For example, reducing the `autovacuum_vacuum_scale_factor` can cause the autovacuuming process to trigger VACUUMs more frequently. As with any other configuration change, make sure to thoroughly test and observe the impacts of any changes before you implement them on a larger scale.
+위 설정값을 조정하면 autovacuum이 충분히 주기적으로 돌아가는지 보장 할 수 있게 된다. 예를 들어 `autovacuum_vacuum_scale_factor` 값을 줄이게 되면 autovacuum 프로세스를 좀 더 자주 트리거하게 된다. 이처럼 다른 설정값들을 변경하는 경우 더 큰 스케일의 환경에 적용하기 전에 충분한 테스트와 모니터링을 통해 어떤 영향을 미치는지 확인해야 한다.
 
-Another informative setting is `log_autovacuum_min_duration`, which will log any autovacuuming activity after the process exceeds this amount of time (measured in milliseconds). This can help provide more visibility into slow autovacuum processes so that you can determine if you need to tweak certain settings to optimize performance.
+또 다른 설정값은 `log_autovacuum_min_duration`인데, 이 설정은 autovacuum 프로세스가 특정 시간(밀리세컨드)을 초과하는 경우 해당 활동을 로그로 남기는 역할을 한다. 이 설정은 느리게 수행되는 autovacuum 프로세스에 대해 가시성을 확보하여 특정 세팅값을 변경하여 성능을 효율화 시키는데 도움을 준다.
 
-### VACUUMs are running into lock conflicts
+### VACUUM 프로세스가 잠금 충돌되는 경우
 If you’ve already ensured that your autovacuuming settings are configured correctly, your VACUUMs could be stalling due to conflicting, exclusive locks on tables. In order to run on a table, a VACUUM process needs to acquire a SHARE UPDATE EXCLUSIVE lock, which conflicts with other locks of the same kind (two transactions cannot hold a SHARE UPDATE EXCLUSIVE lock at the same time), as well as the following lock modes: SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE, and ACCESS EXCLUSIVE. Therefore, if any transactions hold one of these locks on a table, VACUUM cannot execute on that table until the other lock is released, so that it can acquire the SHARE UPDATE EXCLUSIVE lock that it needs.
 
 In one `psql` session, let’s update a bunch of rows, and then issue an ALTER TABLE command, which requires an ACCESS EXCLUSIVE lock on the table:
