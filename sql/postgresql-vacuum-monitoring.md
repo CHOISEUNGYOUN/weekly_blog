@@ -108,7 +108,7 @@ dogwrap -n "Vacuuming my_table" -k $API_KEY --submit_mode all "psql -d <DATABASE
 - [특정 테이블에서만 autovacuum 프로세스가 비활성화 되어있는 경우](#특정-테이블에서만-autovacuum-프로세스가-비활성화-되어있는-경우)
 - [Autovacuum 설정이 업데이트 속도를 따라가지 못하는 경우](#Autovacuum-설정이-업데이트-속도를-따라가지-못하는-경우)
 - [잠금 충돌](#VACUUM-프로세스가-잠금-충돌되는-경우)
-- [오랫동안 수행중인 트랜잭션](#long-running-open-transactions)
+- [오랜 기간동안 열려있는 트랜잭션](#오랜-기간동안-열려있는-트랜잭션)
 
 
 ### autovacuum이 잘 수행되고 있는가?
@@ -211,9 +211,9 @@ autovacuuming threshold = autovacuum_vacuum_threshold + (autovacuum_vacuum_scale
 또 다른 설정값은 `log_autovacuum_min_duration`인데, 이 설정은 autovacuum 프로세스가 특정 시간(밀리세컨드)을 초과하는 경우 해당 활동을 로그로 남기는 역할을 한다. 이 설정은 느리게 수행되는 autovacuum 프로세스에 대해 가시성을 확보하여 특정 세팅값을 변경하여 성능을 효율화 시키는데 도움을 준다.
 
 ### VACUUM 프로세스가 잠금 충돌되는 경우
-If you’ve already ensured that your autovacuuming settings are configured correctly, your VACUUMs could be stalling due to conflicting, exclusive locks on tables. In order to run on a table, a VACUUM process needs to acquire a SHARE UPDATE EXCLUSIVE lock, which conflicts with other locks of the same kind (two transactions cannot hold a SHARE UPDATE EXCLUSIVE lock at the same time), as well as the following lock modes: SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE, and ACCESS EXCLUSIVE. Therefore, if any transactions hold one of these locks on a table, VACUUM cannot execute on that table until the other lock is released, so that it can acquire the SHARE UPDATE EXCLUSIVE lock that it needs.
+Autovacuum 설정을 확인했을 때 정확하게 세팅되어 있다면 VACUUM이 테이블 배타적 잠금(Exclusive lock, write lock이라고도 불린다. 어떤 트랜잭션에서 데이터를 변경하고자 할 때(ex . 쓰고자 할 때) 해당 트랜잭션이 완료될 때까지 해당 테이블 혹은 레코드(row)를 다른 트랜잭션에서 읽거나 쓰지 못하게 잠금을 거는 트랜잭션)과 같은 충돌이 발생하여 중단이 될 수도 있다. 해당 테이블에 VACUUM 작업을 재개하기 위해서 VACUUM 프로세스는 `SHARE UPDATE EXCLUSIVE` 잠금 권한을 획득해야 한다. 이 권한은 같은 종류의 다른 잠금과 충돌이 일어나는 경우(두 트랜잭션이 동시에 `SHARE UPDATE EXCLUSIVE` 잠금을 가지고 있을 수 없음) 이에 대해 접근하기 위함이다. 해당 권한을 획득하면 `SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE, ACCESS EXCLUSIVE` 을 가지게 된다. 결국 특정 트랜잭션이 앞에 언급한 잠금 중 하나가 테이블에 발생하면 해당 VACUUM은 잠금이 풀리기 전까지 실행 되지 않기 때문에 SHARE UPDATE EXCLUSIVE 잠금 권한을 획득해야 한다.
 
-In one `psql` session, let’s update a bunch of rows, and then issue an ALTER TABLE command, which requires an ACCESS EXCLUSIVE lock on the table:
+하나의 `psql` 세션에서 많은 양의 로우를 업데이트하고 테이블 내 `ACCESS EXCLUSIVE` 잠금이 필요한 `ALTER TABLE` 커맨드를 실행해보자.
 
 ```sql
 BEGIN;
@@ -221,17 +221,17 @@ UPDATE something SET number = number + 1;
 ALTER TABLE something RENAME COLUMN number TO id;
 ```
 
-Now, let’s open another `psql` session and try running a VACUUM on the table:
+이제 다른 `psql` 세션을 열어 테이블 `VACUUM`을 동작시키려고 시도해보자.
 
 ```
 VACUUM something;
 ```
 
-In this case, the vacuuming process stalls because it cannot obtain a lock on the table. Our first transaction (which is still open) already holds an ACCESS EXCLUSIVE lock on the table, which conflicts with the SHARE UPDATE EXCLUSIVE lock that a VACUUM requires in order to run.
+이 경우에는 vacuum 프로세스가 실행되지 않는데 이는 테이블 잠금 권한을 획득하지 못했기 때문이다. 첫번째 트랜잭션에서 이미 `ACCESS EXCLUSIVE` 잠금을 테이블에 걸었기 때문에 VACUUM을 실행하기 위해 `SHARE UPDATE EXCLUSIVE` 잠금과 충돌되기 때문이다.
 
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-5.jpeg)
 
-In `htop`, or any other real-time process-monitoring tool, we can see that the VACUUM process is waiting:
+`htop`이나 다른 실시간 프로세스 모니터링 툴에서 VACUUM 프로세스가 대기 상태인것을 확인 할 수 있다.
 
 ```sh
 ps -ef | grep 'waiting'
@@ -240,16 +240,16 @@ postgres 17358 25147  0 11:15 ?        00:00:00 postgres: emily djangodogz 127.0
 ```
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-6.jpeg)
 
-The PostgreSQL logs tell us even more details about why the vacuuming process was waiting—it was unable to obtain the necessary lock on the table:
+PostgreSQL 로그에서 vacuum 프로세스가 왜 대기 상태인지 좀 더 자세히 확인할 수 있다. 이는 아래 사진에 보이듯이 필요한 테이블 잠금 권한을 획득하지 못했기 때문이다.
 
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-7.jpeg)
 
-Because certain transactions may hold exclusive table-level locks that conflict with the vacuuming process, it’s generally a good idea to ensure that clients aren’t leaving transactions open longer than needed—in this case, if we were to keep this transaction open without committing it, this table would never get vacuumed.
+특정 트랜잭션이 vacuum 프로세스와 충돌을 일으키게 되는 테이블 레벨 배타적 잠금으로 잠기게 되기 때문에 DB 클라이언트에서 트랜잭션을 필요 이상으로 열어두지 않도록 하는 것이 좋다. 이 경우 트랜잭션을 커밋하지 않고 열린상태로 유지하게 되면 테이블은 절대 vacuum 되지 않기 때문이다.
 
-### Long-running open transactions
-Another side effect of MVCC is that the vacuuming process cannot clean up dead rows if one or more transactions still need to access the outdated version of the data (e.g., one or more open transactions are operating on a snapshot of the data that was taken before the data was updated/became outdated). Therefore, it’s important to make sure that transactions are committed/closed instead of staying open longer than necessary, or idle.
+### 오랜 기간동안 열려있는 트랜잭션
+MVCC 또다른 부작용은 하나 또는 그 이상의 트랜잭션이 오래된 버전의 데이터를 아직 필요로 하는 경우(예: 하나 또는 그 이상의 열린 트랜잭션이 데이터가 업데이트 또는 사용되지 않게 표식 되기 이전에 오래된 스냅샷의 데이터를 가져와 사용하는 경우) vacuum 프로세스가 죽은 로우들을 제대로 제거하지 못한다는 것이다. 그렇기 때문에 트랜잭션은 필요 이상으로 오래 유지되거나 아이들(idle) 되지 않는 대신 정확한 시간 내에 커밋되고 종료되는 것이 중요하다.
 
-Querying the `pg_stat_activity` view can help confirm if any connections are in a state of [“idle in transaction,”](https://www.postgresql.org/docs/current/monitoring-ps.html) meaning they have begun a session but are not actively doing any work:
+`pg_stat_activity` 뷰에 질의하면 어떤 커넥션이 [“트랜잭션 아이들”](https://www.postgresql.org/docs/current/monitoring-ps.html) 상태인지 확인 할 수 있는데 이 상태는 세션을 맺었지만 아무런 동작을 하지 않음을 의미한다.
 
 ```sql
 SELECT xact_start, state, usename FROM pg_stat_activity;
@@ -259,19 +259,16 @@ SELECT xact_start, state, usename FROM pg_stat_activity;
 -------------------------------+---------------------+----------
  2018-01-24 15:59:18.651181-05 | idle in transaction | emily
 ```
-By default, PostgreSQL will automatically track information about currently open sessions, but if the output of the query above shows that the state is disabled, you need to [enable the `track_activities` setting](https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE) in your postgresql.conf file.
+기본적으로 PostgreSQL은 자동으로 현재 열린 세션들을 추적할 수 있도록 정보들을 제공하지만 위 쿼리의 출력이 비활성화 된 것으로 표시된다면 `postgresql.conf` 파일에서 [`track_activities` 설정을 활성화](https://www.postgresql.org/docs/current/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE) 해야한다.
 
-You can automatically collect the results of this query and forward them to a monitoring platform, which enables you to graph this metric over time and set up alerts to detect when a large number of transactions have gone idle. For more details on how to set this up in Datadog, see [Part 3](https://www.datadoghq.com/blog/collect-postgresql-data-with-datadog) of our PostgreSQL monitoring guide.
+해당 쿼리 결과값을 자동으로 수집하여 모니터링 플랫폼에 제공 할 수 있는데 이렇게 하면 해당 메트릭을 시간 경과에 따라 그래프로 볼 수 있고 많은 양의 트랜잭션이 idle 상태로 있음을 감지하면 알림을 보낼 수 있다. Datadog으로 이러한 설정을 하고 싶다면 [Part 3](https://www.datadoghq.com/blog/collect-postgresql-data-with-datadog)을 참고하여 설정하면 된다.
 
 ![img](/sql/imgs/postgresql-vacuum-monitoring/postgresql-vacuum-monitoring-8.jpeg)
 
+트랜잭션의 상태를 예의주시 함으로써 idle 트랜잭션이 테이블의 VACUUM을 하지 못하도록 방해하는 동작을 방지 할 수 있다. PostgreSQL 9.6 에서 [idle_in_transaction_session_timeout](https://www.postgresql.org/docs/10/runtime-config-client.html#GUC-IDLE-IN-TRANSACTION-SESSION-TIMEOUT) 이라는 설정값이 추가되었는데 이를 이용하면 해당 설정 시간(밀리세컨드로 표시) 이상의 세션이 살아있다면 자동으로 종료시켜준다. 또한 `statement_timeout` 설정을 추가하여 세션별 제한 시간을 둘 수도 있다. 이 설정은 오랜 시간동안 열려있는 트랜잭션을 일정 시간이 지나면 자동으로 종료시켜버리가 때문에 VACUUM 프로세스가 테이블 내 idle 상태인 트랜잭션 때문에 제대로 수행되지 않는 문제를 미연에 방지할 수 있다.
 
-Keeping an eye on the state of your transactions can help ensure that idle transactions aren’t preventing VACUUMs from running on tables. In version 9.6, a setting called [idle_in_transaction_session_timeout](https://www.postgresql.org/docs/10/runtime-config-client.html#GUC-IDLE-IN-TRANSACTION-SESSION-TIMEOUT) was added, which automatically terminates any session that surpasses this number of milliseconds. You can also set a `statement_timeout` that’s limited to a specific session. This setting determines how long to wait before automatically terminating long-running transactions, which can help prevent the scenario where VACUUM processes are having trouble running on tables with idle transactions.
-
-## Monitoring PostgreSQL VACUUMs and more
-PostgreSQL VACUUM processes are just one aspect of maintaining a healthy, efficient database. In order to gain a comprehensive view of your database’s health and performance, you’ll need to monitor key metrics, distributed request traces, and logs from all of your database instances—as well as the rest of your environment.
-
-As your application updates or deletes data in a PostgreSQL database, Datadog can help you correlate all of those queries with performance indicators (e.g., request latency) and infrastructure metrics (e.g., dead rows and disk usage). In the flame graph below, you can see that this request spent almost 30 percent of its time accessing the PostgreSQL service. You can also inspect individual queries and correlate them with host-level metrics and logs to get deep visibility into database health and the overall performance of your application.
+## PostgreSQL VACUUM 모니티링과 그 이외에 추가 내용
+PostgreSQL VACUUM 프로세스는 건강하고 효율적인 데이터베이스를 유지보수 하기위한 한가지 조건이다. 데이터베이스 상태와 성능을 포괄적으로 관리 할 수 있는 뷰가 필요하다면 다른 환경들과 마찬가지로 모든 데이터베이스 인스턴스에 주요 메트릭, 분산된 요청 추적 및 로그들을 모니터링 해야한다.
 
 Original Source:
 [Monitoring PostgreSQL VACUUM processes](https://www.datadoghq.com/blog/postgresql-vacuum-monitoring/)
