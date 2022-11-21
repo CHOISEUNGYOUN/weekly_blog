@@ -1,13 +1,14 @@
-# Key metrics for PostgreSQL monitoring
+# PostgreSQL 모니터링을 위한 핵심 지표
 
-PostgreSQL, or simply "Postgres," is an open source, object-relational database system that was developed out of the POSTGRES project at the University of California, Berkeley. PostgreSQL ensures data integrity and reliability with built-in features like Multi-Version Concurrency Control (MVCC) and write-ahead logging. Today, many organizations and companies, including Cisco, Fujitsu, and Datadog, utilize PostgreSQL as a reliable, robust data storage solution.
+PostgreSQL, 또는 간단하게 "Postgres"라고 불리는 데이터베이스는 오픈소스 관계형 데이터베이스 시스템이다. 이 시스템은 버클리에 위치한 캘리포니아 주립대학교의 POSTGRES 프로젝트에서 탄생하게 되었다. PostgreSQL는 다중 버전 동시성 제어(MVCC, Multi-Version Concurrency Control)와 로그 선행 기입(WAL, Write-ahead logging)과 같은 빌트인 기능들을 통해 데이터 무결성 및 신뢰성을 보장해준다. 오늘날 시스코, 후지쯔 및 데이터독과 같은 많은 기관과 회사에서 PostgreSQL을 신뢰성 있고 견고한 데이터 저장 솔루션으로 활용하고 있다.
 
-## PostgreSQL terminology + overview
-Before diving into the key metrics for PostgreSQL monitoring, let's briefly walk through some terminology. Most notably, a PostgreSQL database cluster is not a collection of servers, but a collection of databases managed by a single server. [PostgreSQL 10](https://www.postgresql.org/docs/10/release-10.html) was the first release to include built-in support for logical replication. Prior to that release, PostgreSQL has left it largely up to users to implement their own approaches to replication and load balancing across databases, typically involving some form of [logical and/or physical data partitioning](https://www.postgresql.org/docs/current/different-replication-solutions.html).
+## PostgreSQL 용어 및 개요
+PostgreSQL의 모니터링 핵심 지표를 알아보기 전에 몇가지 용어들을 찬찬히 살펴보자. 가장 많이 알려진 내용은 PostgreSQL 데이터베이스 클러스터는 서버 클러스터가 아니라 하나의 서버로 관리되는 데이터베이스의 집합이라는 점이다. [PostgreSQL 10](https://www.postgresql.org/docs/10/release-10.html) 부터 처음으로 논리적 복제를 빌트인으로 제공하기 시작했다. 이전 버전에서는 PostgreSQL은 [논리적 및 물리적 데이터 파티셔닝](https://www.postgresql.org/docs/current/different-replication-solutions.html)을 포함하는 데이터베이스 간 복제 및 로드 밸런싱을 사용자가 직접 구현하도록 하였다.
 
-Each database table stores rows of data as an array of 8-KB pages, or blocks. If your data contains field values that exceed this limit, PostgreSQL TOAST (The Oversized-Attribute Storage Technique) is designed to help accommodate this need (consult the [documentation](https://www.postgresql.org/docs/current/storage-toast.html) to see which data types are eligible for TOAST storage).
+각 데이터베이스 테이블은 8KB의 배열로 된 페이지 또는 블록을 저장하도록 구현되어 있다. 이 용량을 추가하는 데이터 필드가 포함되어 있는 경우 PostgreSQL는 TOAST(대형 속성 저장 기술, The Oversized-Attribute Storage Technique)를 활용하여 이러한 니즈들을 해결한다. TOAST로 저장가능한 데이터 타입이 좀 더 자세히 알고 싶다면 [이 문서](https://www.postgresql.org/docs/current/storage-toast.html)를 참고하면 된다.
 
-You may see the terms "block" and "page" used interchangeably—the only difference is that a [page includes a header](https://www.postgresql.org/docs/current/storage-page-layout.html#PAGEHEADERDATA-TABLE) that stores metadata about the block, such as information about the most recent write-ahead log entry that affects tuples in its block. We'll also cover write-ahead logs in more detail in a [later section of this post](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability). The diagram below takes a closer look at how PostgreSQL stores data across rows within each page/block of a table.
+
+아마 블록과 페이지라는 용어를 혼용해서 사용하는 것을 자주 발견했을 것이다. 두 용어의 차이는 [페이지는 헤더](https://www.postgresql.org/docs/current/storage-page-layout.html#PAGEHEADERDATA-TABLE)를 포함하고 있어 해당 블록의 튜플에 가장 최근에 영향을 미친 선행 기입 로그와 같은 메타데이터를 가지고 있다는 점이다. 선행 기입 로그에 대한 [더 자세한 내용](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability)은 이 글의 뒷부분에서 다루고자 한다. 아래 다이어그램은 어떻게 PostgreSQL 클러스터가 각 테이블의 페이지 또는 블록마다 로우 데이터를 저장하는지 잘 보여준다.
 
 ![img](imgs/key-metrics-for-postgresql-monitoring/postgresql-monitoring-storage-diagram.jpeg)
 

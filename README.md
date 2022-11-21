@@ -44,6 +44,7 @@
 * [SQL Antipatterns Chapter20](sql/SQL-Antipatterns-20.md)
 * [Understanding the Postgres EXPLAIN cost](sql/understanding-the-postgres-explain-cost.md)
 * [Monitoring PostgreSQL VACUUM processes](sql/postgresql-vacuum-monitoring.md)
+* [Key metrics for PostgreSQL monitoring](sql/key-metrics-for-postgresql-monitoring.md)
 
 # Etc.
 * [Hunting for great names in programming](etc./Hunting-for-great-names-in-programming.md)
