@@ -12,27 +12,28 @@ PostgreSQL의 모니터링 핵심 지표를 알아보기 전에 몇가지 용어
 
 ![img](imgs/key-metrics-for-postgresql-monitoring/postgresql-monitoring-storage-diagram.jpeg)
 
-PostgreSQL's work extends across four main areas:
-- [planning and optimizing queries](https://www.datadoghq.com/blog/postgresql-monitoring/#read-query-throughput-and-performance)
-- using [multi-version concurrency control](https://www.datadoghq.com/blog/postgresql-monitoring/#write-query-throughput-and-performance) to manage data updates
-- querying data from the [shared buffer cache](https://www.datadoghq.com/blog/postgresql-monitoring/#shared-buffer-usage) and on disk
-- continuously [replicating](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability) data from the primary to one or more standbys
+PostgreSQL의 작업은 아래 4가지의 메인 영역으로 구분 할 수 있다.
+- [계획 및 쿼리 최적화](https://www.datadoghq.com/blog/postgresql-monitoring/#read-query-throughput-and-performance)
+- [다중 버전 동시성 제어](https://www.datadoghq.com/blog/postgresql-monitoring/#write-query-throughput-and-performance)를 사용한 데이터 업데이트 관리
+- [공유 버퍼 캐시](https://www.datadoghq.com/blog/postgresql-monitoring/#shared-buffer-usage) 및 디스크 내 데이터 쿼리
+- 메인 또는 하나 이상의 대기열로의 지속적인 [데이터 복제](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability)
 
-Although these ideas will be explained in further detail throughout this post, let's briefly explore how they all work together to make PostgreSQL an efficient, reliable database.
+해당 포인트들에 대한 자세한 설명은 이 글을 통해 설명할 예정이지만 그럼에도 안정적이고 신뢰성 있는 PostgreSQL 데이터베이스를 어떻게 구성하는지 간략하게 살펴보도록 하겠다.
 
-PostgreSQL uses a query planner/optimizer to determine the most efficient way to execute each query. In order to do so, it accounts for a number of factors, including whether or not the data in question has been indexed, as well as [internal statistics](https://www.postgresql.org/docs/current/planner-stats.html) about the database, like the number of rows in each table.
+PostgreSQL는 쿼리 플래너와 옵티마이저를 사용하여 각 쿼리의 가장 최적화 된 방법을 결정한다. 이러한 수행을 하기 위해서 데이터가 제대로 인덱싱이 되어있는지 부터 시작하여 해당 데이터베이스의 각 테이블에 적재된 로우의 갯수와 같은 [내부 통계](https://www.postgresql.org/docs/current/planner-stats.html)를 조사하는 등의 몇가지 요인들을 확인한다.
 
-When a query involves updating or deleting data, PostgreSQL uses [multi-version concurrency control](https://www.datadoghq.com/blog/postgresql-monitoring/#write-query-throughput-and-performance) (MVCC) to ensure that data remains accessible and consistent, even in high-concurrency environments. Each transaction operates on its own snapshot of the database at that point in time, so that read queries won't block write queries, and vice versa.
+쿼리에 업데이트나 삭제등의 로직이 포함되어 있다면 PostgreSQL는 [다중 버전 동시성 제어](https://www.datadoghq.com/blog/postgresql-monitoring/#write-query-throughput-and-performance)(MVCC)를 사용하여 데이터가 접근 가능하고 일관성 있는지 보장한다. 이는 높은 동시성이 요구되는 환경에서도 동일하게 동작한다. 각 트랜직션은 각 시점의 트랜잭션에 해당되는 데이터베이스의 스냅샷에서 동작하는데 이는 앍기 쿼리가 쓰기 쿼리가 각각 분리되어 동작하기 위함이다.
 
-In order to speed up queries, PostgreSQL uses a certain portion of the database server's memory as a [shared buffer cache](https://www.postgresql.org/docs/current/runtime-config-resource.html#GUC-SHARED-BUFFERS) (128MB by default), to store recently accessed blocks in memory. When data is updated or deleted, PostgreSQL will note the change in the write-ahead log (WAL), update the page in memory, and mark it as "dirty." PostgreSQL periodically runs checkpoint processes to flush these dirty pages from memory to disk, to ensure that data is up to date, not only in memory but also on disk. The animation below shows how PostgreSQL adds and updates data in memory before it gets flushed to disk in a checkpoint process.
+쿼리 속도를 향상시키기 위해서 PostgreSQL은 데이터베이스 서버 메모리내 특정 시점을 [공유 버퍼 캐시](https://www.postgresql.org/docs/current/runtime-config-resource.html#GUC-SHARED-BUFFERS)(기본 128MB)로 활용하는데, 이는 최근에 접근한 블록을 메모리에 저장하기 위함이다. 데이터가 저장 또는 삭제된다면 PostgreSQL은 해당 수정사항을 선행 기입 로그(WAL, write-ahead log) 에 기록한다. 이때 WAL에 메모리에 저장된 해당 페이지를 "dirty" 로 표기한다. PostgreSQL은 주기적으로 체크포인트 프로세스를 동작 시키는데 이는 메모리 내 더티 체킹 된 페이지들을 청소하여 메모리 내 데이터가 메모리 뿐만 아니라 디스크 내에도 항상 최신화 되어있음을 보장하기 위함이다. 
 
-<video src="imgs/key-metrics-for-postgresql-monitoring/postgresql-monitoring-animation-compressed.mp4" width=860></>
+<video src="https://imgix.datadoghq.com/img/blog/postgresql-monitoring/postgresql-monitoring-animation-compressed.mp4" width=860></>
 
-PostgreSQL [maintains data reliability](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability) by logging each transaction in the WAL on the primary, and writing it to disk periodically. In order to ensure high availability, the primary needs to communicate WAL updates to one or more standby servers.
+PostgreSQL은 [데이터 신뢰성](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability)을 유지하기 위해 메인에 위치한 WAL에 각 트랜잭션을 로깅하고 주기적으로 디스크에 쓰기작업을 한다. 고가용성을 유지하기 위해선 메인 서버에 위치한 WAL의 업데이트를 하나 또는 여러대의 대기 서버와 통신을 해야한다.
 
-In this post, we'll cover all of these concepts in more detail, as well as the important metrics for PostgreSQL monitoring that will help you ensure that your database is able to do its work successfully.
+이 글에서는 위에서 언급한 내용들 뿐만 아니라 PostgreSQL 모니터링을 위해서 알아야할 중요한 지표들을 좀 더 자세하게 설명할 예정이다. 이를 통해 사용중인 데이터베이스가 문제없이 동작하는지 이해 할 수 있을 것이다.
 
-## Key metrics for PostgreSQL monitoring
+## PostgreSQL 모니터링을 위한 주요 지표
+
 PostgreSQL automatically collects a substantial number of statistics about its activity, but here we will focus on just a few categories of metrics that can help you gain insights into the health and performance of your database servers:
 
 - [Read query throughput and performance](https://www.datadoghq.com/blog/postgresql-monitoring/#read-query-throughput-and-performance)
