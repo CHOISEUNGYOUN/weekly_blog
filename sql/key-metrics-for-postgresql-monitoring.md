@@ -34,20 +34,20 @@ PostgreSQL은 [데이터 신뢰성](https://www.datadoghq.com/blog/postgresql-mo
 
 ## PostgreSQL 모니터링을 위한 주요 지표
 
-PostgreSQL automatically collects a substantial number of statistics about its activity, but here we will focus on just a few categories of metrics that can help you gain insights into the health and performance of your database servers:
+PostgreSQL은 상당한 양의 쿼리 활동 통계 데이터를 자동으로 수잡하지만 여기서는 건강하고 성능이 잘 나오는 데이터베이스 서버를 유지하기 위해 도움이 되는 통찰을 얻는데 도움이 되는 몇가지 지표들에 대해 중점을 두고 서술할 예정이다.
 
-- [Read query throughput and performance](https://www.datadoghq.com/blog/postgresql-monitoring/#read-query-throughput-and-performance)
-- [Write query throughput and performance](https://www.datadoghq.com/blog/postgresql-monitoring/#write-query-throughput-and-performance)
-- [Replication and reliability](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability)
-- [Resource utilization](https://www.datadoghq.com/blog/postgresql-monitoring/#resource-utilization)
+- [읽기 쿼리 스루풋(throughput)과 성능](#읽기-쿼리-스루풋과-성능)
+- [쓰기 쿼리 스루풋과 성능](https://www.datadoghq.com/blog/postgresql-monitoring/#write-query-throughput-and-performance)
+- [복제와 신뢰성](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability)
+- [리소스 최적화](https://www.datadoghq.com/blog/postgresql-monitoring/#resource-utilization)
 
-All of the metrics mentioned in this article are accessible through PostgreSQL's [statistics collector](https://www.postgresql.org/docs/current/monitoring-stats.html) and other native sources. In the [next part](https://www.datadoghq.com/blog/postgresql-monitoring-tools/) of this series, we'll explain how to query and collect these metrics for visualization and alerting.
+이 글에서 언급한 모든 지표들은 PostgreSQL의 [통계 수집기](https://www.postgresql.org/docs/current/monitoring-stats.html)와 기타 기본 소스들을 통해 확인 할 수 있다. 이 시리즈의 [다음 글](https://www.datadoghq.com/blog/postgresql-monitoring-tools/)에서는 해당 지표들을 어떻게 쿼리하고 시각화와 알림 전달을 위해 어떻게 수집하는지 설명하고자 한다.
 
-This article references metric terminology defined in our [Monitoring 101 series](https://www.datadoghq.com/blog/monitoring-101-collecting-data/), which provides a framework for metric collection and alerting.
+이 글은 또한 지표 수집과 알림에 관한 프레임워크 기능을 제공하는 데이터독의 [Monitoring 101 시리즈](https://www.datadoghq.com/blog/monitoring-101-collecting-data/)를 인용하고 있다.
 
 ![img](imgs/key-metrics-for-postgresql-monitoring/postgresql-monitoring-dashboard-pt1v4.jpeg)
 
-## Read query throughput and performance
+## 읽기 쿼리 스루풋과 성능
 PostgreSQL collects internal statistics about its activity in order to provide a window into how effectively the database is performing its work. One major category of its work is read query throughput—monitoring this metric helps you ensure that your applications are able to access data from your database.
 
 | Metric description | Name |	Metric type	| Availability |
