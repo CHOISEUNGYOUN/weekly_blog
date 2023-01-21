@@ -65,24 +65,24 @@ PostgreSQL는 어떻게 데이터베이스가 효율적으로 작업을 하는�
 
 쿼리 플래너가 인덱스 검색보다 순차 검색을 선호하는 것이 잘못된 것이라고 생각한다면 `random_page_cost` 설정값(디스크내 임의의 페이지를 접근하는데 드는 예상 비용)을 살짝 변경해 볼 수 있다. [이 문서](https://www.postgresql.org/docs/current/runtime-config-query.html#GUC-RANDOM-PAGE-COST)에 따르면 `seq_page_cost`(이 값에 대해서는 다음 섹션에서 자세히 설명하겠다.) 대비해서 낮아진다면 쿼리 플래너가 인덱스 검색을 더 선호한다고 기술하고 있다. 여기서 기본 설정은 [90퍼센트 정도의 읽기 쿼리는 이미 메모리에 캐싱된 데이터를 접근 할 것](https://www.postgresql.org/docs/current/runtime-config-query.html#GUC-RANDOM-PAGE-COST)이라고 가정 하고 있다. 하지만 전용 데이터베이스 인스턴스를 실행중이고 전체 데이터베이스가 사용중인 메모리 용량에 적합하다면 임의 페이지 비용을 낮추어 좋은 결과를 얻을 수 있는지 확인 할 수 있다.
 
-**Rows fetched vs. rows returned by queries to the database:** Somewhat confusingly, PostgreSQL tracks `tup_returned` as the number of rows read/scanned, rather than indicating anything about whether those rows were actually returned to the client. Rather, `tup_fetched`, or "rows fetched", is the metric that counts how many rows contained data that was actually needed to execute the query. Ideally, the number of rows fetched should be close to the number of rows returned (read/scanned) on the database. This indicates that the database is completing read queries efficiently—it is not scanning through many more rows than it needs to in order to satisfy read queries.
+**가져온 로우 vs 데이터베이스에서 질의하여 반환된 로우:** 다소 혼란스럽게도 PostgreSQL은 클라이언트에 실제로 반환된 로우의 집합에 대한 정보가 아닌 읽기/스캔된 로우의 갯수를 `tup_returned` 로써 추적하고 있다. 오히려 `tup_fetched` 또는 "가져온 로우 수"는 실제 필요한 쿼리를 실행할 때 필요한 데이터가 포함된 로우가 얼마나 많이 반환하는지 계산하는 지표이다. 이상적으로는 가져온 로우의 갯수가 데이터베이스내에서 실제 반환된 로우의 갯수(읽기/검색)의 수치와 근접해야 한다. 아는 데이터베이스가 읽기 쿼리를 효율적으로 완료하고 있음을 나타내고 있다. 즉, 읽기 쿼리를 충족하기 위해 필요 이상으로 검색을 수행하지 않는다는 것이다.
 
-In the screenshot below, PostgreSQL is scanning (purple) through more rows in this particular database than it is fetching (green), which indicates that the data may not be properly indexed.
+아래 스크린샷에서 볼 수 있듯이 PostgreSQL은 특정 데이터베이스에서 검색(보라색 선)을 가져오는 것(초록색 선) 보다 많이 수행함을 알 수 있다. 이는 데이터가 적절하게 인덱싱 되어있지 않을 수도 있음을 나타낸다.
 
 ![img](imgs/key-metrics-for-postgresql-monitoring/postgresql-monitoring-rows-fetched-vs-returned.jpeg)
 
-PostgreSQL can only perform an index scan if the query does not need to access any columns that haven't been indexed. Typically, creating indexes on frequently accessed columns can help improve this ratio. However, maintaining each index doesn’t come free—it requires the database to perform additional work whenever it needs to add, update, or remove data included in any particular index.
+PostgreSQL은 쿼리가 인덱싱 되지 않은 컬럼에 접근할 필요가 없는 경우에만 인덱스 검색을 할 수 있다. 보통 자주 접근되는 컬럼에 인덱스를 추가하는 것은 검색 효율을 높이는데 도움이 된다. 하지만 각 인덱스는 공짜로 유지보수 되지 않는다. 특정 인덱스가 포함된 데이터가 추가, 변경 또는 삭제될 때마다 데이터베이스 내 추가적인 작업이 요구된다.
 
-**Amount of data written temporarily to disk to execute queries:** PostgreSQL reserves a certain amount of memory—specified by `work_mem` (4 MB by default)—to perform sort operations and hash tables needed to execute queries. `EXPLAIN ANALYZE` (which is explained in further detail in the [next section](https://www.datadoghq.com/blog/postgresql-monitoring/#postgresql-query-planner)) can help you gauge how much memory a query will require.
+**쿼리를 실행하기 위해 임시로 디스크에 적재된 데이터의 양:** PostgreSQL은 쿼리를 실행하는데 필요한 정렬작업과 해시테이블을 사용하기 위해 `work_mem`(기본값으로 4MB 설정) 으로 지정된 일정량의 데이터를 메모리에 저장한다. `EXPLAIN ANALYZE`(이 내용은 [다음 섹션](https://www.datadoghq.com/blog/postgresql-monitoring/#postgresql-query-planner)에서 자세히 다루겠다.)을 사용하면 어느정도의 메모리가 쿼리 실행시 필요한지 측정 할 수 있다.
 
-When a complex query requires access to more memory than `work_mem` allows, it has to write some data temporarily to disk in order to do its work, which has a negative impact on performance. If you see data frequently being written to temporary files on disk, this indicates that you are running a large number of resource-intensive queries. To improve performance, you may need to increase the size of `work_mem`—however, it's important not to set this too high, because it can encourage the query planner to choose more inefficient queries.
+복잡한 쿼리를 사용하는 경우 `work_mem` 에서 설정한 메모리 값보다 더 많은 양을 요구하는데, 이 경우에는 특정 데이터를 임시로 디스크에 저장하는데, 이때 성능상의 부정적인 효과가 따라온더. 데이터가 자주 디스크에 저장된 파일에 접근하여 쓰게된다면 이는 곧 작업 리소스가 많이 필요한 쿼리를 실행함을 의미한다. 성능을 향상시키기 위해선 `work_mem` 사이즈를 키워야 한다. 중요한 점은 이 설정값을 높게 잡지 않는 것인데, 그 이유는 쿼리 플래너가 비효율적인 쿼리를 선택하게 될 수 있기 때문이다.
 
-Another reason you shouldn't set `work_mem` too high is that it's a per-operation setting—so if you're running a complex query that includes several sort operations, each operation will be allowed to use up to `work_mem` amount of memory before writing temporarily to disk. With an overly generous `work_mem` setting, your database will not have enough memory left to serve a high number of concurrent connections, which can negatively impact performance or crash your database.
+`work_mem` 을 높게 잡지 말아야하는 또 다른 이유는 작업별 설정을 꼽을 수 있다. 예를 들어 여러번의 정렬 작업이 필요한 복잡한 쿼리를 실행해야 하는 경우 각 실행 단계마다 `work_mem` 에 설정된 양 만큼의 메모리를 디스크에 임시 저장 하기전에 사용할 것이다. 너무 높은 수치의 `work_mem` 설정은 데이터베이스내 메모리를 많이 소모하여 동시 연결하여 많은 양의 데이터를 제공하기 충분한 양을 남겨놓지 않을 것이다. 이는 성능상의 부정적인 영향 또는 데이터베이스의 크래시를 불러이를 것이다.
 
-### PostgreSQL query planner
-To understand more about these throughput metrics, it can be helpful to get more background about how the [query planner/optimizer](https://www.postgresql.org/docs/current/planner-optimizer.html) works. The query planner/optimizer uses [internal statistics](https://www.postgresql.org/docs/current/planner-stats.html) (such as the number of fields in a table or index) to estimate the cost of executing different query plans, and then determines which one is optimal. One of the plans it always evaluates is a sequential scan.
+### PostgreSQL 쿼리 플래너
+스루풋 지표를 좀 더 잘 이해하고 싶다면 [쿼리 플래너/옵티마이저](https://www.postgresql.org/docs/current/planner-optimizer.html)가 어떻게 동작하는지 이해하면 도움이 된다. 쿼리 플래너/옵티마이저는 [내부 통계](https://www.postgresql.org/docs/current/planner-stats.html)(예를 들면 테이블 또는 인덱스 내 필드의 숫자)를 사용하여 수행된 다른 쿼리 플랜 대비 성능 측정을 하여 어떤 것이 더 효율적인지 판단한다. 항상 비교되는 하나의 플랜은 순차 검색이다.
 
-Running an `EXPLAIN` command can help provide more insights into those internal statistics, which the planner actually uses to estimate the cost of a query:
+`EXPLAIN` 명령어를 실행하면 해당 내부 통계에 대한 다양한 정보를 얻을 수 있다. 이를 통해 어떤 쿼리 플래너가 쿼리 측정을 위해 사용되는지 확인 할 수 있다.
 
 ```sql
 EXPLAIN SELECT * FROM blog_article ORDER BY word_count;
@@ -94,7 +94,7 @@ EXPLAIN SELECT * FROM blog_article ORDER BY word_count;
 (3 rows)
 ```
 
-The planner calculates the cost by using a number of factors—in this case, the number of rows that need to be scanned (4,261) and the number of blocks that this table is stored on. You can find out how many blocks are in this particular table/relation (or `relname`), by querying `pg_class`:
+플래너는 스캔해야 하는 로우의 갯수(4,261개)와 이 테이블이 저장된 블록 수와 같은 여러 요소를 사용하여 비용을 계산한다. `pg_class` 를 쿼리 하여 특정 테이블/관계(또는 `relname`)에 얼마나 많은 블록이 있는지 확인 할 수 있다.
 
 ```sql
 SELECT relpages, reltuples FROM pg_class WHERE relname='blog_article';
@@ -103,7 +103,7 @@ SELECT relpages, reltuples FROM pg_class WHERE relname='blog_article';
 ----------+-----------
        38 |      4261
 ```
-This tells us that our `blog_article` table contains data that is stored across 38 pages, which contain 4,261 tuples/rows. To calculate the cost of the sequential scan in the query plan above, the planner used this formula:
+위 수치는 `blog_article` 테이블에 38 페이지 분량의 데이터, 즉 4,261 개의 튜플/로우가 저장되어 있음을 알 수 있다. 위 쿼리 플래너에서 순차 검색 비용을 계산하기 위해 플래너는 아래 공식을 사용했다.
 
 ```sql
 cost of sequential scan = (pages read * seq_page_cost) + (rows scanned * cpu_tuple_cost)
