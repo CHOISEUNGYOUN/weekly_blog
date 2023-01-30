@@ -106,17 +106,16 @@ SELECT relpages, reltuples FROM pg_class WHERE relname='blog_article';
 위 수치는 `blog_article` 테이블에 38 페이지 분량의 데이터, 즉 4,261 개의 튜플/로우가 저장되어 있음을 알 수 있다. 위 쿼리 플래너에서 순차 검색 비용을 계산하기 위해 플래너는 아래 공식을 사용했다.
 
 ```sql
-cost of sequential scan = (pages read * seq_page_cost) + (rows scanned * cpu_tuple_cost)
+순차검색 비용 = (읽은 페이지 수 * seq_page_cost) + (스캔한 로우의 갯수 * cpu_tuple_cost)
 ```
-`seq_page_cost` refers to the planner's estimate of the cost of fetching a page from disk during a sequential scan, while `cpu_tuple_cost` is the planner's estimate of the CPU cost of querying a row/tuple. Actual sequential page cost will vary according to your disk hardware, so if you're using high-performance SSDs, your cost of fetching a page from disk will be lower than if you were storing data on hard disk drives. You can adjust the values of `seq_page_cost` and `cpu_tuple_cost` in your PostgreSQL settings to match the performance of your hardware. For now, we'll use the default values to calculate the cost shown in our query plan above:
+`seq_page_cost`가 순차검색을 하는 동안 디스크에서 페이를 가져오는 플래너의 예상 비용이라면 `cpu_tuple_cost`는 로우/튜플을 쿼리하는데 드는 CPU 비용에 대한 플래너의 예상 비용이다. 실제로 드는 순차 검색 배용은 디스크 하드웨어에 따라 다르다. 이 때문에 고성능 SSD를 사용한다면 디스크에서 페이지를 가져오는 비용이 하드디스크 드라이브에 데이터를 저장하는 비용보다 적을 수 있다. 필요에 따라 하드웨어 성능에 맞추기 위해 `seq_page_cost` 과 `cpu_tuple_cost` 값을 PostgreSQL 설정에서 조정 할 수 있다. 지금은 위 쿼리 계획에 드는 비용을 기본값을 활용할 것이다.
 
 ```sql
 cost = (38 pages read * 1.0) + (4261 rows scanned * 0.01) = 80.61
 ```
+`EXPLAIN` 키워드를 사용하면 쿼리를 실행하는데 드는 예상 시간이 아니라 예상 비용을 보여준다. 하지만 두 값이 높다면 쿼리 실행시간이 길어지기 때문에 상당한 연관관계가 있다.
 
-Note that `EXPLAIN` shows you the estimated cost, rather than the estimated time it takes to run a query. However, the two values should be strongly correlated—the higher the cost, the longer the query will take.
-
-If you run `EXPLAIN ANALYZE` on a query, it will actually execute the query and show you the planner's estimated costs of running the query, compared to the actual timing of that query:
+[`EXPLAIN ANALYZE`](https://www.postgresql.org/docs/current/using-explain.html) 키워드를 쿼리에 실행하면 실제 쿼리를 실행함과 동시에 플래너가 예상한 쿼리 실행비용을 실제 쿼리 실행시간과 비교대조 할 것이다.
 
 ```sql
 EXPLAIN ANALYZE SELECT * FROM blog_article ORDER BY word_count; QUERY PLAN
@@ -127,22 +126,21 @@ Sort (cost=337.48..348.14 rows=4261 width=31) (actual time=9.039..11.101 rows=42
   -> Seq Scan on blog_article (cost=0.00..80.61 rows=4261 width=31) (actual time=0.049..1.559 rows=4261 loops=1) Total runtime: 11.981 ms
 (5 rows)
 ```
-`EXPLAIN ANALYZE` enables you to assess how closely the planner's estimates stack up against actual execution (in this example, the planner correctly estimated that it would need to scan through 4,261 rows). The output also tells us that it used 525 KB of memory to complete the sort operation (meaning it did not need to write any data temporarily to disk). Another benefit of running `ANALYZE` is that it helps provide the query planner/optimizer with up-to-date internal statistics that will make its execution plans more accurate as the database gets updated in real time.
+`EXPLAIN ANALYZE`를 사용하면 쿼리 플래너의 예상값이 실제 실행값(위 예제에서는 플래너의 예측과 동일하게 4,261개의 로우를 조회해야함.)과 얼마나 일치하는지 알 수 있다. 여기서 나온 결과값에 따르면 정렬 작업에 525KB의 메모리가 사용됨을 알 수 있다.(디스크에 임시로 데이터를 저장할 필요가 없다는 의미임.) `ANALYZE` 키워드를 사용할때 또 다른 장점은 데이터베이스에 실시간으로 업데이트 될 때마다 실행계획을 변경하는데 이를 반영한 최신의 내부 통계 로직을 쿼리 플래너/옵티마이저에 반영한다는 점이다.
 
-In addition to troubleshooting slow queries with `EXPLAIN ANALYZE`, you may also find it helpful to log the `EXPLAIN` output for slow queries that surpass a specific latency threshold, by specifying `auto_explain.log_min_duration` in your configuration file. In the example below, we've set it to automatically log the `EXPLAIN` execution plan for every SQL statement that exceeds 250 ms:
+`EXPLAIN ANALYZE` 를 사용하여 느린 쿼리를 트러블슈팅을 하는 것 이외에도 `EXPLAIN`을 사용하면 환경설정 파일에 있는 `auto_explain.log_min_duration`에 기재된 값에 따른 레이턴시 임계치를 초과하는 느린 쿼리의 결과값을 로깅하는데 유용하다. 아래 예시는 250ms 를 초괴하는 모든 SQL문의 `EXPLAIN` 실행 계획을 자동으로 저장하는 설정이다.
 
 ```
 # postgresql.conf
 
 auto_explain.log_min_duration = 250
 ```
+`EXPLAIN`과 `EXPLAIN ANALYZE` 쿼리에 대해 좀 더 자세히 알고싶다면 [explain.depesz.com](https://explain.depesz.com/)과 같은 툴을 참고 할 수 있다.
 
-For help with deciphering `EXPLAIN` and `EXPLAIN ANALYZE` queries, you can consult a tool like [explain.depesz.com](https://explain.depesz.com/).
+## 쓰기 쿼리의 처리량과 성능
+어플리케이션이 데이터베이스로부터 읽기를 보장하는것 이외에도 얼마나 효과적으로 데이터 쓰기/변경을 하는지도 모니터링 해야한다. 쓰기 처리중에 발생하는 문제나 비정상적인 변화는 보통 복제나 신뢰성과 같은 다른 주요 측면에 문제가 있음을 나타낸다. 그러므로 읽기 처리량을 모니터링 하는것은 데이터베이스 전반적인 상태와 가용성을 유지하려면 쓰기 처리량을 모니터링 하는것이 중요하다.
 
-## Write query throughput and performance
-In addition to ensuring that your applications can read data from your database, you should also monitor how effectively you can write/update data to PostgreSQL. Any issues or unusual changes in write throughput usually point to problems in other key aspects of the database, including replication and reliability. Therefore, monitoring write throughput is crucial to ensure that you maintain the overall health and availability of your database.
-
-### Writing data to PostgreSQL: MVCC
+### PostgreSQL에 데이터 쓰기: MVCC
 Before we dive into the metrics, let's explore how PostgreSQL uses [multi-version concurrency control](https://www.postgresql.org/docs/current/mvcc-intro.html) (MVCC) to ensure that concurrent transactions do not block each other. Each transaction operates based on a snapshot of what the database looked like when it started. In order to do this, every `INSERT`, `UPDATE`, or `DELETE` transaction is assigned its own transaction ID (XID), which is used to determine which rows will and will not be visible to that transaction.
 
 Each row stores metadata in a header, including [`t_xmin` and `t_xmax` values](https://github.com/postgres/postgres/blob/master/src/include/access/htup_details.h#L118) that specify which transactions/XIDs will be able to view that row's data. `t_xmin` is set to the XID of the transaction that last inserted or updated it. If the row is live (hasn't been deleted), its `t_xmax` value will be 0, meaning that it is visible to all transactions. If it was deleted or updated, its `t_xmax` value is set to the XID of the transaction that deleted or updated it, indicating that it will not be visible to future `UPDATE` or `DELETE` transactions (which will get assigned an XID > `t_xmax`). Any row with a `t_xmax` value is also known as a "dead row" because it has either been deleted or updated with new data.
