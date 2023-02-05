@@ -13,8 +13,8 @@ PostgreSQL의 모니터링 핵심 지표를 알아보기 전에 몇가지 용어
 ![img](imgs/key-metrics-for-postgresql-monitoring/postgresql-monitoring-storage-diagram.jpeg)
 
 PostgreSQL의 작업은 아래 4가지의 메인 영역으로 구분 할 수 있다.
-- [계획 및 쿼리 최적화](https://www.datadoghq.com/blog/postgresql-monitoring/#read-query-throughput-and-performance)
-- [다중 버전 동시성 제어](https://www.datadoghq.com/blog/postgresql-monitoring/#write-query-throughput-and-performance)를 사용한 데이터 업데이트 관리
+- [계획 및 쿼리 최적화](#읽기-쿼리-스루풋과-성능)
+- [다중 버전 동시성 제어](#쓰기-쿼리의-처리량과-성능)를 사용한 데이터 업데이트 관리
 - [공유 버퍼 캐시](https://www.datadoghq.com/blog/postgresql-monitoring/#shared-buffer-usage) 및 디스크 내 데이터 쿼리
 - 메인 또는 하나 이상의 대기열로의 지속적인 [데이터 복제](https://www.datadoghq.com/blog/postgresql-monitoring/#replication-and-reliability)
 
@@ -141,17 +141,17 @@ auto_explain.log_min_duration = 250
 어플리케이션이 데이터베이스로부터 읽기를 보장하는것 이외에도 얼마나 효과적으로 데이터 쓰기/변경을 하는지도 모니터링 해야한다. 쓰기 처리중에 발생하는 문제나 비정상적인 변화는 보통 복제나 신뢰성과 같은 다른 주요 측면에 문제가 있음을 나타낸다. 그러므로 읽기 처리량을 모니터링 하는것은 데이터베이스 전반적인 상태와 가용성을 유지하려면 쓰기 처리량을 모니터링 하는것이 중요하다.
 
 ### PostgreSQL에 데이터 쓰기: MVCC
-Before we dive into the metrics, let's explore how PostgreSQL uses [multi-version concurrency control](https://www.postgresql.org/docs/current/mvcc-intro.html) (MVCC) to ensure that concurrent transactions do not block each other. Each transaction operates based on a snapshot of what the database looked like when it started. In order to do this, every `INSERT`, `UPDATE`, or `DELETE` transaction is assigned its own transaction ID (XID), which is used to determine which rows will and will not be visible to that transaction.
+지표에 대해 좀 더 자세히 알아보기 전에 어떻게 PostgreSQL이 어떻게 [다중 버전 동시성 제어](https://www.postgresql.org/docs/current/mvcc-intro.html)(MVCC) 를 사용하여 동시에 작업이 진행되는 동안 서로 블로킹을 하지 않도록 보장하는지 한번 알아보자. 각 트랜잭션은 데이터베이스가 시작되었을 때 당시의 스냅샷을 기반으로 동작한다. 해당 작업을 수행하기 위해 각 `INSERT`, `UPDATE`, `DELETE` 트랜잭션에 고유의 트랜잭션 ID(XID)를 부여하여 어떤 로우가 트랜잭션에서 보이게 되는지 여부를 결정한다.
 
-Each row stores metadata in a header, including [`t_xmin` and `t_xmax` values](https://github.com/postgres/postgres/blob/master/src/include/access/htup_details.h#L118) that specify which transactions/XIDs will be able to view that row's data. `t_xmin` is set to the XID of the transaction that last inserted or updated it. If the row is live (hasn't been deleted), its `t_xmax` value will be 0, meaning that it is visible to all transactions. If it was deleted or updated, its `t_xmax` value is set to the XID of the transaction that deleted or updated it, indicating that it will not be visible to future `UPDATE` or `DELETE` transactions (which will get assigned an XID > `t_xmax`). Any row with a `t_xmax` value is also known as a "dead row" because it has either been deleted or updated with new data.
+각 로우는 [`t_xmin` 과 `t_xmax` 값](https://github.com/postgres/postgres/blob/master/src/include/access/htup_details.h#L118)을 헤더에 포함한 메타데이터를 저장한다. 해당 값들은 어떤 트랜잭션 ID가 해당 로우의 데이터를 볼 수 있는지 결정한다. `t_xmin` 은 마지막으로 추가되거나 변경된 트랜잭션의 XID를 기록한다. 해당 로우가 아직 살아있고 (아직 삭제되지 않았다면) 해당 로우의 `t_xmax`값이 0이 되는 경우는 모든 트랜잭션에서 해당 로우의 값을 볼 수 있음을 의미한다. 만약 해당 값이 삭제되거나 변경된다면 해당 값이 이후의 `UPDATE` 또는 `DELETE` 트랜잭션에서 보이지 않게 된다.(즉, 이 XID는 `t_xmax` 보다 높은 값으로 선언된다.) `t_xmax` 값보다 이하의 XID를 가진 로우들을 "죽은 로우"라고 칭하는데 이는 삭제되거나 새로운 데이터로 변경되었기 때문이다.
 
-To understand a little more about how MVCC works behind the scenes, let's look at a simplified example of the various stages of a `DELETE` operation. First, we'll create a table & add some data to it:
+MVCC가 배후에서 어떻게 동작하는지 좀 더 잘 이해하기 위해 아래 `DELETE` 작업의 다양한 단계에 대한 간단한 예시를 살펴보자. 우선 테이블을 생성하고 데이터를 추가해보자.
 
 ```sql
 CREATE TABLE employees ( id SERIAL, name varchar, department varchar);
 INSERT INTO employees (name, department) VALUES ('Sue', 'Sales'), ('Dan', 'Operations'), ('Snoop', 'Sales');
 ```
-Here's a quick look at the employees table:
+여기 employees 테이블을 살펴보자.
 
 ```sql
 SELECT * FROM employees;
@@ -163,8 +163,7 @@ SELECT * FROM employees;
   3 | Snoop | Sales
 (3 rows)
 ```
-
-Now we can use the [pageinspect module](https://www.postgresql.org/docs/current/pageinspect.html) to take a closer look at the page:
+이제 [pageinspect module](https://www.postgresql.org/docs/current/pageinspect.html)를 사용하여 해당 페이지에 대해 자세히 살펴보자.
 
 ```sql
 SELECT * FROM heap_page_items(get_raw_page('employees', 0));
@@ -176,9 +175,9 @@ SELECT * FROM heap_page_items(get_raw_page('employees', 0));
   3  | 8064 | 1 | 40 | 730 | 0 | 0 | (0,3)  | 3 | 2306 | 24 |  |
 (3 rows)
 ```
-Note that the `t_xmin` column shows us the transaction ID (XID) that was assigned to the `INSERT` operation we ran in the previous step.
+`t_xmin` 컬럼은 이전 단계에서 `INSERT`문을 사용하여 선언된 트랜잭션 ID(XID)이다.
 
-Let's delete everyone in Sales and then query the table again:
+이제 세일즈 부서에 소속된 사람들을 지우고 다시 질의를 해보자.
 
 ```sql
 DELETE FROM employees WHERE department = 'Sales';
@@ -189,7 +188,7 @@ SELECT * FROM employees;
   2 | Dan  | Operations
 (1 row)
 ```
-But we will still be able to see the deleted rows when we inspect the page:
+삭제했지만 여전히 페이지를 검사할 때 삭제된 로우가 보임을 확인할 수 있다.
 
 ```sql
 SELECT * FROM heap_page_items(get_raw_page('employees',0));
@@ -201,18 +200,18 @@ SELECT * FROM heap_page_items(get_raw_page('employees',0));
   3 |   8064 |      1  |     40 |    730 |    731 |      0 | (0,3)   |      8195   |       1282 |     24 |        |
 (3 rows)
 ```
-Note that the deleted/dead rows now have a `t_xmax` value equal to the transaction ID (XID) of the `DELETE` operation (731). Because future transactions will be assigned XIDs that are larger than this `t_xmax` value, they will not be able to view the dead row. However, the database will still have to scan over dead rows during each sequential scan until the next `VACUUM` process removes the dead rows (see more details about `VACUUMs` in the [section below](https://www.datadoghq.com/blog/postgresql-monitoring/#concurrent-operations-performance-metrics)).
+삭제되거나 죽은 로우들은 트랜잭션 ID(XID)가 `DELETE` 문이 실행되었을때(위 예시의 `t_xmax` 컬럼의 731) `t_xmax` 값과 동일함을 확인 할 수 있다. 이는 추후 발생하는 트랜잭션에서 위에 나타난 `t_xmax`보다 큰 XID 값이 선언 될 것이고 해당 트랜잭션은 더이상 죽은 로우들을 확인 할 수 없기 때문이다. 하지만 데이터베이스는 다음 `VACUUM` 프로세스(이 내용에 대해서는 이 섹션의 [아래](https://www.datadoghq.com/blog/postgresql-monitoring/#concurrent-operations-performance-metrics)에서 좀더 다루고자 한다.)가 죽은 로우들을 정리하기 전까지 순차 검색시 여전히 죽은 로우들을 포함하여 검색하게된다. 
 
-### Write query throughput & performance metrics
-| Metric description | Name |	Metric type |	Availability |
+### 쓰기 쿼리의 스루풋과 성능 지표
+| 지표 설명 | 이름 | 지표 종류 | 확인 가능한 테이블 |
 |--------------------|------|-------------|--------------|
-| Rows inserted, updated, deleted by queries (per database) |	tup_inserted, tup_updated, tup_deleted |Work: Throughput | pg_stat_database |
-| Rows inserted, updated, deleted by queries (per table) |	n_tup_ins, n_tup_upd, n_tup_del |	Work: Throughput | pg_stat_user_tables |
-| Heap-only tuple (HOT) updates	| n_tup_hot_upd |	Work: Throughput | pg_stat_user_tables |
-| Total number of transactions executed (commits + rollbacks) |	xact_commit + xact_rollback |	Work: Throughput | pg_stat_database |
+| 쿼리에 의해(데이터베이스 당) 추가, 변경, 삭제된 된 로우 |	tup_inserted, tup_updated, tup_deleted |Work: Throughput | pg_stat_database |
+| 쿼리에 의해(테이블 당) 추가, 변경, 삭제된 된 로우 |	n_tup_ins, n_tup_upd, n_tup_del |	Work: Throughput | pg_stat_user_tables |
+| 힙에서만 업데이트 된(HOT) 튜플 | n_tup_hot_upd |	Work: Throughput | pg_stat_user_tables |
+| 총 수행된 트랜잭션의 수 (commits + rollbacks) |	xact_commit + xact_rollback |	Work: Throughput | pg_stat_database |
 
-### Metrics to watch:
-**Rows inserted, updated, and deleted:** Monitoring the number of rows inserted, updated, and deleted can help give you an idea of what types of write queries your database is serving. If you see a high rate of updated and deleted rows, you should also keep a close eye on the number of dead rows, since an increase in dead rows indicates a problem with `VACUUM` processes, which can slow down your queries.
+### 눈여겨 보아야할 지표:
+**추가, 변경, 삭제된 된 로우:** Monitoring the number of rows inserted, updated, and deleted can help give you an idea of what types of write queries your database is serving. If you see a high rate of updated and deleted rows, you should also keep a close eye on the number of dead rows, since an increase in dead rows indicates a problem with `VACUUM` processes, which can slow down your queries.
 
 A sudden drop in throughput is concerning and [could be due to issues like locks](https://www.datadoghq.com/blog/postgresql-monitoring/#concurrent-operations-performance-metrics) on tables and/or rows that need to be accessed in order to make updates. Monitoring write activity along with other database metrics like locks can help you pinpoint the potential source of the throughput issue.
 
