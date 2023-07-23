@@ -211,40 +211,41 @@ SELECT * FROM heap_page_items(get_raw_page('employees',0));
 | 총 수행된 트랜잭션의 수 (commits + rollbacks) |	xact_commit + xact_rollback |	Work: Throughput | pg_stat_database |
 
 ### 눈여겨 보아야할 지표:
-**추가, 변경, 삭제된 된 로우:** Monitoring the number of rows inserted, updated, and deleted can help give you an idea of what types of write queries your database is serving. If you see a high rate of updated and deleted rows, you should also keep a close eye on the number of dead rows, since an increase in dead rows indicates a problem with `VACUUM` processes, which can slow down your queries.
+**추가, 변경, 삭제된 된 로우:** 추가, 변경 및 삭제 되는 로우들을 모니터링 하면 데이터이스에서 제공하는 쓰기 쿼리 유형을 파악하는데 도움이 된다. 많은 양의 로우가 변경 및 삭제되는것이 발견된다면 얼만큼 죽은 로우가 생성되는지 확인해야한다. 이는 죽은 로우의 수가 늘어남에 따라 `VACUUM` 프로세스에 문제가 발생하여 쿼리 속도를 저하시키기 때문이다.
 
-A sudden drop in throughput is concerning and [could be due to issues like locks](https://www.datadoghq.com/blog/postgresql-monitoring/#concurrent-operations-performance-metrics) on tables and/or rows that need to be accessed in order to make updates. Monitoring write activity along with other database metrics like locks can help you pinpoint the potential source of the throughput issue.
+처리량 수치 저하는 데이터의 변경을 위해 테이블 또는 각 로우별 [lock](https://www.datadoghq.com/blog/postgresql-monitoring/#concurrent-operations-performance-metrics)에 의해 발생 할 수 있다. Lock과 같은 데이터베이스 지표를 참고한 쓰기 활동 모니터링은 처리량 문제에 대한 잠재적 문제를 발견하는데 도움이 된다.
 
 ![img](imgs/key-metrics-for-postgresql-monitoring/postgresql-monitoring-rows-deleted.jpeg)
 
-**Tuples updated vs. heap-only tuples (HOT) updated:** PostgreSQL will try to optimize updates when it is feasible to do so, through what's known as a [Heap-Only Tuple (HOT)](https://github.com/postgres/postgres/blob/master/src/backend/access/heap/README.HOT) update. A HOT update is possible when the transaction does not change any columns that are currently indexed (for example, if you created an index on the column `age`, but the update only affects the `name` column, which is not indexed).
+**튜플 변경 vs. 힙 전용 튜플(HOT) 변경:** PostgreSQL는 가능한 경우 [힙 전용 튜플(HOT)](https://github.com/postgres/postgres/blob/master/src/backend/access/heap/README.HOT) 업데이트로 알려진 방법을 통해 데이터 업데이트를 최적화 하려고 한다. HOT 변경은 인덱싱된 컬럼들을 변경하지 않는 트랜잭션인 경우 활용이 가능하다.(예를 들어 `age` 라는 컬럼에 인덱스가 생성되어 있지만 인덱싱 하지 않은 `name` 컬럼만 업데이트 하려는 경우)
 
-In comparison with normal updates, a HOT update introduces less I/O load on the database, since it can update the row without having to update its associated index. In the next index scan, PostgreSQL will see a pointer in the old row that directs it to look at the new data instead. In general, you want to see more HOT updates over regular updates because they produce less load on the database. If you see a significantly higher number of updates than HOT updates, it may be due to frequent data updates in indexed columns. This issue will only continue to increase as your indexes grow in size and become more difficult to maintain.
+기본적인 변경과 비교하자면 HOT 변경은 변경하려는 로우 값에 대응하는 인덱스를 변경하지 않아도 되기 때문에 데이터베이스 I/O에 적은 부담을 준다. 다음 인덱스 검색에서 PostgreSQL는 이전 로우 값이 새 로우 값을 보도록 지시하는 포인터를 보게 된다. 일반적으로 데이터베이스에 좀 더 적은 부하를 주는 HOT 변경을 일반적인 변경보다 더 많이 활용하고 싶어한다. 만약 HOT 변경보다 훨씬 더 많은 양의 변경을 발견하게 된다면 이는 인덱싱 된 컬럼의 값이 자주 변경되기 때문이다. 이 문제는 인덱스 사이즈가 크면 클수록 더욱 더 유지보수하기 힘들어지게 된다.
 
-### Concurrent operations performance metrics
-PostgreSQL's statistics collector tracks several key metrics that pertain to concurrent operations. Tracking these metrics is an important part of PostgreSQL monitoring, helping you ensure that the database can scale sufficiently to be able to fulfill a high rate of queries. The `VACUUM` process is one of the most important maintenance tasks related to ensuring successful concurrent operations.
+### 동시 작업 성능 지표
+PostgreSQL의 통계 수집기는 통시 작업을 유지하기 위해 몇가지 주요 지표들을 추적한다. 이 지표들을 추적하는것은 높은 비율의 쿼리를 수행할 수 있도록 데이터베이스가 충분히 확장 될 수 있도록 도와주기 때문에 PostgreSQL 모니터링에 중요한 부분이다. `VACUUM` 프로세스는 성공적인 동시 작업이 잘 수행될 수 있도록 보장해주는 가장 중요한 유지보수 작업이다.
 
-### Exploring the VACUUM process 
-MVCC enables operations to occur concurrently by utilizing snapshots of the database (hence the "multi-version" aspect of MVCC), but the tradeoff is that it creates dead rows that eventually need to be cleaned up by running a `VACUUM` process.
-The `VACUUM` process removes dead rows from tables and indexes and adds a marker to indicate that the space is available. Usually, the operating system will technically consider that disk space to be "in use," but PostgreSQL will still be able to use it to store updated and/or newly inserted data. In order to actually recover disk space to the OS, you need to run a [`VACUUM FULL`](https://www.postgresql.org/docs/9.6/routine-vacuuming.html) process, which is more resource-intensive, and requires an exclusive lock on each table as it works. If you do determine that you need to run a `VACUUM` FULL, you should do so during off-peak hours.
+### VACUUM 프로세스 이해하기
+MVCC를 사용하면 데이터베이스의 스냅샷을 활용하여 작업을 동시에 수행 할 수 있지만(MVCC의 "다중 버전" 측면) `VACUUM` 프로세스를 통해 정리되어야 하는 죽은 로우들이 생성된다는 단점을 가지고 있다.
+`VACUUM` 프로세스는 테이블의 죽은 로우들을 제거하면서 인덱싱 해둔 뒤 해당 공간은 사용이 가능하다고 표시를 남겨놓는다. 보통 운영 시스템이 해당 공간을 "사용중" 이라고 간주하지만 PostgreSQL은 해당 공간을 변경되거나 새롭게 추가되는 데이터로 저장한다. 실제로 해당 공간을 OS로 부터 복구를 하기 위해서는 [`VACUUM FULL`](https://www.postgresql.org/docs/9.6/routine-vacuuming.html) 프로세스를 실행해야 한다. 이 작업은 리소스가 더 많이 들어가고 작업중에 해당 테이블이 배타적 잠금이 들어가게 된다. `VACUUM FULL` 작업을 하기로 결정했다면 반드시 사용량이 적인 시간대에 수행해야 된다.
 
-Routinely running `VACUUM` processes is crucial to maintaining efficient queries—not just because sequential scans have to scan through those dead rows, but also because `VACUUM` processes provide the query planner with updated internal statistics about tables, so that it can plan more efficient queries. To automate this process, you can enable the [autovacuum daemon](https://www.postgresql.org/docs/current/routine-vacuuming.html#AUTOVACUUM) to periodically run a `VACUUM` process whenever the number of dead rows in a table surpasses a specific threshold. This threshold is calculated based on a combination of factors:
+효율적인 쿼리를 유지하려면 정기적으로 `VACUUM` 프로세스를 실행하는 것이 중요하다. 이는 순차 검색이 죽은 로우들을 검색하는 이유 뿐만 아니라 `VACUUM` 프로세스가 쿼리 플래너에 테이블에 대한 변경된 내부 통계를 제공함으로써 좀 더 효율적인 쿼리를 계획할 수 있기 때문이다.
+이 프로세스를 자동화 하기 위해선 [autovacuum daemon](https://www.postgresql.org/docs/current/routine-vacuuming.html#AUTOVACUUM)을 활성화 시킨 다음 테이블 내 죽은 로우의 숫자가 특정 임계치를 넘을 때 마다 주기적으로 `VACUUM` 프로세스를 수행하도록 설정해야 한다. 여기서 임계치는 아래 지표들을 종합하여 계산한다.
 
-- the `autovacuum_vacuum_threshold` (50, by default)
-- the `autovacuum_vacuum_scale_factor` (0.2 or 20 percent, by default)
-- the estimated number of rows in the table (based on the value of `pg_class.reltuples`)
+- the `autovacuum_vacuum_threshold` (50, 기본값)
+- the `autovacuum_vacuum_scale_factor` (0.2 또는 20 퍼센트, 기본값)
+- 테이블 당 예상되는 로우의 수(`pg_class.reltuples` 수치에 기반)
 
-The autovacuum daemon uses the following formula to calculate when it will trigger a `VACUUM` process on any particular table:
+Autovacuum 데몬은 아래 공식을 활용하여 특정 테이블에 `VACUUM` 프로세스를 동작시킬지 계산한다.
 
 ```
-autovacuuming threshold = autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor * estimated number of rows in the table
+autovacuuming 임계치 = autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor * 테이블 당 예상되는 로우의 수
 ```
 
-For example, if a table contains an estimated 5,000 rows, the autovacuum daemon (configured using the default settings listed above) would launch a VACUUM on it whenever the number of dead rows in that table surpasses a threshold of `50 + 0.2 * 5000`, or `1,050`.
+예를 들어 테이블에 약 5000개의 로우가 저장되어 있다고 가정한다면 autovacuum 데몬은 (위에 언급한 기본값으로 설정이 되어있다는 가정) 해당 테이블의 죽은 로우의 갯수가 `50 + 0.2 * 5000`, 또는 `1,050` 를 초과하면 `VACUUM`을 동작시킨다.
 
-If it detects that a table has recently seen an increase in updates, the autovacuum process will run an `ANALYZE` command to gather statistics to help the query planner make more informed decisions. Each `VACUUM` process also updates the [visibility map](https://www.postgresql.org/docs/current/storage-vm.html), which shows which pages are visible to active transactions. This can improve the performance of index-only scans and will make the next `VACUUM` more efficient by enabling it to skip those pages. `VACUUM` processes can normally run concurrently with most operations like `SELECT/INSERT/UPDATE/DELETE` queries, but they may not be able to operate on a table if there is a lock-related conflict (e.g. due to an `ALTER TABLE` or `LOCK TABLE` operation).
+테이블내 변경이 증가하게 되면 autovacuum 프로세스는 `ANALYZE` 명령을 실행하여 쿼리 플래너가 정확한 결정을 내리기 위한 통계를 수집한다. 각 `VACUUM` 프로세스는 또한 활성 트랜잭션에 어떤 페이지가 표시되는지 보여주는 [가시성 맵](https://www.postgresql.org/docs/current/storage-vm.html)을 업데이트한다. 이는 인덱스 전용 스캔의 성능을 향상 시킬 수 있으며 해당 페이지를 건너 뛸 수 있도록 하여 다음 `VACUUM`을 보다 효율적으로 만든다. `VACUUM` 프로세스는 보통 `SELECT/INSERT/UPDATE/DELETE` 쿼리와 함께 동시에 실행되지만 lock 과 같은 충돌(`ALTER TABLE` 또는 `LOCK TABLE`)이 발생하면 동작하지 않을 수 있다.
 
-| Metric description | Name |	Metric type |	Availability |
+| 지표 설명 | 명칭 |	지표 유형 |	가용성 |
 |--------------------|------|-------------|--------------|
 | Locks	| lock | Other | pg_locks |
 | Deadlocks (v. 9.2+) |	deadlocks |	Other |	pg_stat_database |
